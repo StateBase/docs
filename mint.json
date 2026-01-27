@@ -17,11 +17,41 @@
     },
     "navigation": [
         {
-            "group": "Welcome",
+            "group": "Getting started",
             "pages": [
                 "introduction",
                 "quickstart",
-                "architecture"
+                "quickstart-memory"
+            ]
+        },
+        {
+            "group": "Tutorials",
+            "pages": [
+                "tutorials/mcp-server",
+                "tutorials/chrome-extension",
+                "tutorials/n8n-integration"
+            ]
+        },
+        {
+            "group": "Migration Guides",
+            "pages": [
+                "migration/mem0",
+                "migration/langchain"
+            ]
+        },
+        {
+            "group": "Enterprise",
+            "pages": [
+                "enterprise/self-hosting"
+            ]
+        },
+        {
+            "group": "Advanced Usage",
+            "pages": [
+                "advanced/context-arithmetic",
+                "advanced/patterns",
+                "advanced/architecture",
+                "advanced/errors"
             ]
         },
         {

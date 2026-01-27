@@ -1,60 +1,98 @@
 ---
-title: Introduction
-description: "The Reliability Layer for Production AI Agents"
+title: "Introduction"
+description: "Understand AI context, memory, and how StateBase helps you build reliable, context-aware LLMs and agents."
 ---
 
-<img
-  className="block dark:hidden"
-  src="/images/hero-light.png"
-  alt="Hero Light"
-/>
-<img
-  className="hidden dark:block"
-  src="/images/hero-dark.png"
-  alt="Hero Dark"
-/>
+## Overview
+
+StateBase is the **context layer** for LLMs and AI agents. It helps you store, retrieve, and apply context so AI systems stay accurate, relevant, and consistent over time.
+
+If you’ve ever struggled with:
+*   ❌ Stateless LLM responses
+*   ❌ Prompt stuffing
+*   ❌ Fragile RAG pipelines
+*   ❌ Agents that "forget" users or past actions
+
+**StateBase is built to solve exactly that.**
+
+## What problem does StateBase solve?
+
+Large language models don't remember anything by default. Every request starts from scratch unless you:
+1.  **Manually inject context**
+2.  **Rebuild memory systems**
+3.  **Orchestrate retrieval logic yourself**
+
+This quickly becomes brittle, expensive, and hard to scale. StateBase makes **context a first-class system capability**.
 
 ## What is StateBase?
 
-StateBase is an infrastructure layer designed to solve the "Amalthea Problem" in autonomous agents: **State Drift**.
+StateBase is a **developer-first infrastructure** for AI context management. It gives you a reliable way to:
 
-As agents execute long-running tasks, their context window gets polluted, their logic loops, and they "forget" constraints set in previous turns. StateBase provides a deterministic file system for your agent's mind.
+1.  **Store** application, user, and workflow context as raw facts.
+2.  **Retrieve** the most relevant information based on the query.
+3.  **Feed** that context into LLMs and agents.
 
-<CardGroup cols={2}>
-  <Card
-    title="Session Management"
-    icon="layer-group"
-    href="/concepts/sessions"
-  >
-    Maintain perfect state continuity across infinite turns.
-  </Card>
-  <Card
-    title="Semantic Memory"
-    icon="brain"
-    href="/concepts/memory"
-  >
-    Automatic long-term memory formation and retrieval.
-  </Card>
-  <Card
-    title="Instant Rollback"
-    icon="clock-rotate-left"
-    href="/concepts/snapshots"
-  >
-    Revert your agent to any previous state with one API call.
-  </Card>
-  <Card
-    title="Decision Tracing"
-    icon="magnifying-glass-chart"
-    href="/architecture"
-  >
-    Full audit logs of why your agent did what it did.
-  </Card>
-</CardGroup>
+All without writing custom memory or retrieval infrastructure.
+
+## Why use StateBase instead of rolling your own?
+
+| Feature | Roll Your Own | StateBase |
+| :--- | :--- | :--- |
+| **Architecture** | Custom vector plumbing | Clean API, no glue code |
+| **AI Output** | Hallucinations common | Grounded, relevant responses |
+| **Speed** | Weeks of dev time | Minutes with SDKs |
+| **Reliability** | Prototype quality | Production-grade SLA |
+
+## How StateBase Works
+
+StateBase sits between your Data and your LLM.
+
+<Steps>
+  <Step title="Ingest Context">
+    Store data from users, files, APIs, or application events.
+  </Step>
+  <Step title="Index & Organize">
+    Context is structured into a Knowledge Graph for fast, relevant retrieval.
+  </Step>
+  <Step title="Search">
+    Retrieve only the most useful context for a specific user request.
+  </Step>
+  <Step title="Use with LLM">
+    Pass retrieved context into prompts or agent logic via the SDK.
+  </Step>
+  <Step title="Persist">
+    Automatically update memory as users and workflows evolve.
+  </Step>
+</Steps>
+
+## Who is this for?
+
+StateBase is built for:
+*   **Developers** building autonomous agents.
+*   **Teams** shipping LLM-powered SaaS products.
+*   **Engineers** tired of maintaining fragile RAG pipelines.
 
 ## Why StateBase?
 
-StateBase is built for developers who are done with toy demos and are deploying **mission-critical agents** in Fintech, Healthcare, and Enterprise environments.
+Most AI systems break as context grows. We don't. StateBase operates at the **Pareto Frontier**—higher reliability without sacrificing capability.
 
-1.  **Framework Agnostic**: Works with LangChain, LlamaIndex, AutoGen, or raw OpenAI API.
-2.  **Zero Latency Overhead**: Asynchronous architecture ensures your UX stays snappy.
-3.  **Compliance Ready**: Every state change is hashed and auditable.
+*   **Memory isn't Text**: We store information as structured facts (Entities), modeled as connected nodes.
+*   **LLMs aren't the Core**: They reason over resolved context, but never own the state or truth.
+*   **Context is Deterministic**: No bloated prompts, no token juggling, no surprise amnesia.
+*   **Built for Production**: Stable, inspectable, and auditable.
+
+## Next Steps
+
+Start with the fastest path to value:
+
+<CardGroup>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Build a Contextual Agent in 2 minutes.
+  </Card>
+  <Card title="Tutorials" icon="book-open" href="/tutorials/mcp-server">
+    Real projects like MCP Servers and N8N integrations.
+  </Card>
+  <Card title="Migration" icon="arrow-right-arrow-left" href="/migration/mem0">
+    Coming from Mem0? See how to upgrade.
+  </Card>
+</CardGroup>

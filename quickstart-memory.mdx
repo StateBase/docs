@@ -1,0 +1,65 @@
+---
+title: "Quickstart - Memory-aware AI Agent"
+description: "Build an agent that remembers user preferences across sessions."
+---
+
+In this guide, we'll build a simple "Personal Shopper" agent that remembers your style preferences.
+
+## 1. Setup
+
+<CodeGroup>
+```bash Python
+pip install statebase-sdk openai
+```
+</CodeGroup>
+
+## 2. Store Preferences (Seeding)
+
+First, let's inject some knowledge about the user.
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_live_...")
+user_id = "user_sarah_connor"
+
+# Inject facts
+sb.memory.add(
+    user_id=user_id,
+    content="User loves vintage leather jackets and 90s aesthetic.",
+    tags=["fashion", "style"]
+)
+sb.memory.add(
+    user_id=user_id,
+    content="User hates bright neon colors.",
+    tags=["fashion", "dislikes"]
+)
+```
+
+## 3. Retrieve Context
+
+Now, let's ask the agent for a recommendation.
+
+```python
+from openai import OpenAI
+
+# 1. Fetch relevant memories
+memories = sb.memory.search(
+    user_id=user_id,
+    query="suggestion for winter coat"
+)
+# Returns: "User loves vintage leather jackets..."
+
+# 2. Generate
+client = OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[
+        {"role": "system", "content": f"Context: {memories}"},
+        {"role": "user", "content": "What should I buy for winter?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+# Output: "Based on your love for 90s aesthetics, I recommend a vintage leather bomber jacket..."
+```

@@ -1,0 +1,27 @@
+---
+title: "Migrating from Mem0"
+description: "Upgrade from Mem0 to StateBase"
+---
+
+StateBase offers a superset of Mem0's features with better durability and enterprise controls.
+
+## Differences
+
+| Feature | Mem0 | StateBase |
+| :--- | :--- | :--- |
+| **Storage** | Vector Only | Graph + Vector + Relational |
+| **Audit** | None | Full Trace Logs |
+| **State** | Stateless | Stateful Sessions |
+
+## Migration Script
+
+We provide a utility to import your Mem0 vector dump.
+
+```python
+from statebase.migration import import_mem0
+
+import_mem0(
+    api_key="sb_live_...",
+    mem0_export_path="./mem0_dump.json"
+)
+```

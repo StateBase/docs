@@ -1,0 +1,33 @@
+---
+title: "Context Arithmetic"
+description: "Combining contexts for complex reasoning"
+---
+
+StateBase allows you to perform **Set Operations** on context contexts.
+
+## Union (Merge)
+
+Combine User Context + Global Company Context.
+
+```python
+user_ctx = sb.context.get(user_id="user_123")
+corp_ctx = sb.context.get(org_id="corp_abc")
+
+full_context = user_ctx + corp_ctx
+```
+
+## Intersection (Commonality)
+
+Find shared knowledge between two users.
+
+```python
+shared_context = ctx_user_a & ctx_user_b
+```
+
+## Subtraction (Privacy)
+
+Remove sensitive PII from a context before sending to LLM.
+
+```python
+safe_context = full_context - sensitive_topics
+```

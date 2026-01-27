@@ -1,0 +1,22 @@
+---
+title: "Self Hosting"
+description: "Deploy StateBase in your VPC"
+---
+
+StateBase is available as a Docker container for Enterprise customers.
+
+## Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  statebase:
+    image: ghcr.io/statebase/core:latest
+    environment:
+      - PG_URI=postgresql://...
+      - REDIS_URI=redis://...
+    ports:
+      - "8000:8000"
+```
+
+Contact sales@statebase.org for a license key.
