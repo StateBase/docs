@@ -11,6 +11,20 @@
         "dark": "#2563EB",
         "anchors": "#3B82F6"
     },
+    "topbarLinks": [
+        {
+            "name": "Dashboard",
+            "url": "https://app.statebase.org"
+        },
+        {
+            "name": "Website",
+            "url": "https://statebase.org"
+        },
+        {
+            "name": "Support",
+            "url": "mailto:support@statebase.org"
+        }
+    ],
     "topbarCtaButton": {
         "type": "github",
         "url": "https://github.com/statebase/statebase"
@@ -22,36 +36,6 @@
                 "introduction",
                 "quickstart",
                 "quickstart-memory"
-            ]
-        },
-        {
-            "group": "Tutorials",
-            "pages": [
-                "tutorials/mcp-server",
-                "tutorials/chrome-extension",
-                "tutorials/n8n-integration"
-            ]
-        },
-        {
-            "group": "Migration Guides",
-            "pages": [
-                "migration/mem0",
-                "migration/langchain"
-            ]
-        },
-        {
-            "group": "Enterprise",
-            "pages": [
-                "enterprise/self-hosting"
-            ]
-        },
-        {
-            "group": "Advanced Usage",
-            "pages": [
-                "advanced/context-arithmetic",
-                "advanced/patterns",
-                "advanced/architecture",
-                "advanced/errors"
             ]
         },
         {
@@ -79,6 +63,14 @@
             ]
         },
         {
+            "group": "Tutorials",
+            "pages": [
+                "tutorials/mcp-server",
+                "tutorials/chrome-extension",
+                "tutorials/n8n-integration"
+            ]
+        },
+        {
             "group": "API Reference",
             "pages": [
                 "api-reference/introduction",
@@ -86,6 +78,34 @@
                 "api-reference/turns",
                 "api-reference/memory",
                 "api-reference/traces"
+            ]
+        },
+        {
+            "group": "Migration Guides",
+            "pages": [
+                "migration/mem0",
+                "migration/langchain"
+            ]
+        },
+        {
+            "group": "Enterprise",
+            "pages": [
+                "enterprise/self-hosting"
+            ]
+        },
+        {
+            "group": "Advanced Usage",
+            "pages": [
+                "advanced/context-arithmetic",
+                "advanced/patterns",
+                "advanced/architecture",
+                "advanced/errors"
+            ]
+        },
+        {
+            "group": "Changelog",
+            "pages": [
+                "changelog"
             ]
         }
     ],
