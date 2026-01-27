@@ -11,8 +11,6 @@
         "dark": "#2563EB",
         "anchors": "#60A5FA"
     },
-    "theme": "dark",
-    "layout": "wide",
     "topbarLinks": [
         {
             "name": "Dashboard",
