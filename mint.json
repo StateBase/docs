@@ -9,8 +9,10 @@
         "primary": "#2563EB",
         "light": "#2563EB",
         "dark": "#2563EB",
-        "anchors": "#3B82F6"
+        "anchors": "#60A5FA"
     },
+    "theme": "dark",
+    "layout": "wide",
     "topbarLinks": [
         {
             "name": "Dashboard",
@@ -29,6 +31,16 @@
         "type": "github",
         "url": "https://github.com/statebase/statebase"
     },
+    "tabs": [
+        {
+            "name": "Documentation",
+            "url": "introduction"
+        },
+        {
+            "name": "API Reference",
+            "url": "api-reference/introduction"
+        }
+    ],
     "navigation": [
         {
             "group": "Getting started",

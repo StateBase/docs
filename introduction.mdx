@@ -1,98 +1,71 @@
 ---
-title: "Introduction"
-description: "Understand AI context, memory, and how StateBase helps you build reliable, context-aware LLMs and agents."
+title: Welcome to StateBase
+description: The Pareto Frontier for AI Context.
+mode: "wide"
 ---
 
-## Overview
+<Hero>
+  <img
+    className="block dark:hidden"
+    src="/images/hero-light.png"
+    alt="Hero Light"
+  />
+  <img
+    className="hidden dark:block"
+    src="/images/hero-dark.png"
+    alt="Hero Dark"
+  />
+</Hero>
 
-StateBase is the **context layer** for LLMs and AI agents. It helps you store, retrieve, and apply context so AI systems stay accurate, relevant, and consistent over time.
+StateBase is the **infrastructure layer** for reliable AI agents. We solve the "Amalthea Problem"—the inevitable drift and hallucination that occurs when LLMs run statelessly.
 
-If you’ve ever struggled with:
-*   ❌ Stateless LLM responses
-*   ❌ Prompt stuffing
-*   ❌ Fragile RAG pipelines
-*   ❌ Agents that "forget" users or past actions
-
-**StateBase is built to solve exactly that.**
-
-## What problem does StateBase solve?
-
-Large language models don't remember anything by default. Every request starts from scratch unless you:
-1.  **Manually inject context**
-2.  **Rebuild memory systems**
-3.  **Orchestrate retrieval logic yourself**
-
-This quickly becomes brittle, expensive, and hard to scale. StateBase makes **context a first-class system capability**.
-
-## What is StateBase?
-
-StateBase is a **developer-first infrastructure** for AI context management. It gives you a reliable way to:
-
-1.  **Store** application, user, and workflow context as raw facts.
-2.  **Retrieve** the most relevant information based on the query.
-3.  **Feed** that context into LLMs and agents.
-
-All without writing custom memory or retrieval infrastructure.
-
-## Why use StateBase instead of rolling your own?
-
-| Feature | Roll Your Own | StateBase |
-| :--- | :--- | :--- |
-| **Architecture** | Custom vector plumbing | Clean API, no glue code |
-| **AI Output** | Hallucinations common | Grounded, relevant responses |
-| **Speed** | Weeks of dev time | Minutes with SDKs |
-| **Reliability** | Prototype quality | Production-grade SLA |
-
-## How StateBase Works
-
-StateBase sits between your Data and your LLM.
-
-<Steps>
-  <Step title="Ingest Context">
-    Store data from users, files, APIs, or application events.
-  </Step>
-  <Step title="Index & Organize">
-    Context is structured into a Knowledge Graph for fast, relevant retrieval.
-  </Step>
-  <Step title="Search">
-    Retrieve only the most useful context for a specific user request.
-  </Step>
-  <Step title="Use with LLM">
-    Pass retrieved context into prompts or agent logic via the SDK.
-  </Step>
-  <Step title="Persist">
-    Automatically update memory as users and workflows evolve.
-  </Step>
-</Steps>
-
-## Who is this for?
-
-StateBase is built for:
-*   **Developers** building autonomous agents.
-*   **Teams** shipping LLM-powered SaaS products.
-*   **Engineers** tired of maintaining fragile RAG pipelines.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Build your first stateful agent in **2 minutes**.
+  </Card>
+  <Card title="The Architecture" icon="sitemap" href="/advanced/architecture">
+    Understand the Entity Graph and SNAP algorithm.
+  </Card>
+  <Card title="Cookbook" icon="book" href="/cookbook/langchain">
+    Copy-paste patterns for LangChain, Vercel AI, and more.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Interactive OpenAPI documentation.
+  </Card>
+</CardGroup>
 
 ## Why StateBase?
 
-Most AI systems break as context grows. We don't. StateBase operates at the **Pareto Frontier**—higher reliability without sacrificing capability.
+We replace brittle "Prompt Engineering" with deterministic **State Engineering**.
 
-*   **Memory isn't Text**: We store information as structured facts (Entities), modeled as connected nodes.
-*   **LLMs aren't the Core**: They reason over resolved context, but never own the state or truth.
-*   **Context is Deterministic**: No bloated prompts, no token juggling, no surprise amnesia.
-*   **Built for Production**: Stable, inspectable, and auditable.
+| Feature | StateBase | DIY / Vector DB |
+| :--- | :--- | :--- |
+| **Persistence** | **Sessions** (Immutable Ledger) | Ephemeral Logs |
+| **Context** | **Graph + Vector** (Semantic) | Naive Chunks |
+| **Logic** | **State Machines** | Probabilistic |
+| **Scale** | **Serverless** | Self-Managed |
 
-## Next Steps
+## Explore by Use Case
 
-Start with the fastest path to value:
-
-<CardGroup>
-  <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Build a Contextual Agent in 2 minutes.
+<CardGroup cols={3}>
+  <Card title="Personalization" icon="user" href="/concepts/memory">
+    Remember user preferences forever.
   </Card>
-  <Card title="Tutorials" icon="book-open" href="/tutorials/mcp-server">
-    Real projects like MCP Servers and N8N integrations.
+  <Card title="Auditability" icon="shield-check" href="/api-reference/traces">
+    Full replayability for every agent decision.
   </Card>
-  <Card title="Migration" icon="arrow-right-arrow-left" href="/migration/mem0">
-    Coming from Mem0? See how to upgrade.
+  <Card title="Drift Control" icon="anchor" href="/concepts/snapshots">
+    Instant rollbacks when agents go off-rail.
+  </Card>
+</CardGroup>
+
+## Community & Support
+
+<CardGroup cols={2}>
+  <Card title="GitHub" icon="github" href="https://github.com/statebase/statebase">
+    Star us on GitHub.
+  </Card>
+  <Card title="Discord" icon="discord" href="https://discord.gg/statebase">
+    Join the developer community.
   </Card>
 </CardGroup>
