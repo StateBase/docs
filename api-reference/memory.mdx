@@ -1,4 +1,93 @@
 ---
 title: "Memory API"
-openapi: "POST /v1/memories"
+description: "Semantic storage and retrieval"
 ---
+
+<Note>
+**Memories** are distinct from Session State. They are semantic facts stored in a Vector Database for retrieval across different sessions or long time horizons.
+</Note>
+
+## Create Memory
+
+Manually inject a memory into the graph. (Usually handled automatically by SNAP, but useful for initial knowledge seeding).
+
+<ParamField body="session_id" type="string" required>
+  Associate with a session context.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The text content to store and embed.
+</ParamField>
+
+<ParamField body="type" type="string" default="general">
+  Classification: `fact`, `preference`, `summary`, or `correction`.
+</ParamField>
+
+<ParamField body="tags" type="array">
+  List of string tags for filtering.
+</ParamField>
+
+<ParamField body="embed" type="boolean" default="true">
+  If true, triggers the embedding generation pipeline immediately.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.statebase.org/v1/memories \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "sess_123",
+    "content": "User prefers concise python code without type hints.",
+    "type": "preference",
+    "tags": ["coding", "style"]
+  }'
+```
+
+```json Response
+{
+  "object": "memory",
+  "id": "mem_555...",
+  "content": "User prefers...",
+  "vector_available": true,
+  "embedding_id": "emb_777..."
+}
+```
+</CodeGroup>
+
+## Search Memories
+
+Perform RAG (Retrieval Augmented Generation) on your agent's memory.
+
+<ParamField query="query" type="string" required>
+  The semantic search query.
+</ParamField>
+
+<ParamField query="threshold" type="float" default="0.75">
+  Minimum cosine similarity score (0-1).
+</ParamField>
+
+<ParamField query="top_k" type="integer" default="3">
+  Number of results to return.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl "https://api.statebase.org/v1/memories?query=python+style&threshold=0.8" \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "mem_555...",
+      "content": "User prefers concise python code...",
+      "score": 0.92,
+      "type": "preference"
+    }
+  ],
+  "query": "python style"
+}
+```
+</CodeGroup>

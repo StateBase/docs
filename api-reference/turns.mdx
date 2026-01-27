@@ -1,4 +1,92 @@
 ---
 title: "Turns API"
-openapi: "POST /v1/sessions/{session_id}/turns"
+description: "Record and retrieve agent interactions"
 ---
+
+<Note>
+A **Turn** represents a single atomic interaction cycle: User Input -> Agent Processing -> Agent Output.
+Turns are immutable once recorded.
+</Note>
+
+## Create Turn
+
+<ParamField path="session_id" type="string" required>
+  The ID of the session this turn belongs to.
+</ParamField>
+
+<ParamField body="input" type="object" required>
+  The user's input. Must contain `type` (e.g. "text") and `content`.
+</ParamField>
+
+<ParamField body="output" type="object" required>
+  The agent's response. Must contain `type` and `content`.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Arbitrary metrics (token usage, latency, model versions).
+</ParamField>
+
+<ParamField body="reasoning" type="string">
+  Optional internal monologue or "Check-of-Thought" trace from the agent.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.statebase.org/v1/sessions/sess_123/turns \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "type": "text",
+      "content": "What is the capital of France?"
+    },
+    "output": {
+      "type": "text",
+      "content": "The capital of France is Paris."
+    },
+    "metadata": {
+      "model": "gpt-4",
+      "tokens_input": 15,
+      "tokens_output": 7
+    },
+    "reasoning": "User is asking a geography fact. Retrieving from general knowledge."
+  }'
+```
+
+```json Response
+{
+  "object": "turn",
+  "id": "turn_098...",
+  "session_id": "sess_123",
+  "created_at": "2026-01-27T10:05:00Z",
+  "turn_number": 1,
+  "input": { "type": "text", "content": "..." },
+  "output": { "type": "text", "content": "..." },
+  "metadata": { "model": "gpt-4", ... },
+  "reasoning": "..."
+}
+```
+</CodeGroup>
+
+## List Turns
+
+Retrieve the conversation history for a session.
+
+<ParamField path="session_id" type="string" required>
+  The session ID.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Max results to return.
+</ParamField>
+
+<ParamField query="order" type="string" default="desc">
+  Sort order: `asc` or `desc`.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl https://api.statebase.org/v1/sessions/sess_123/turns?limit=5 \
+  -H "Authorization: Bearer <token>"
+```
+</CodeGroup>

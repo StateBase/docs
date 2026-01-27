@@ -1,6 +1,59 @@
 ---
-title: "OpenAI"
-description: "Native integration with GPT-4"
+title: "OpenAI Integration"
+description: "Optimized prompt engineering with StateBase"
 ---
 
-StateBase context is optimized for OpenAI's prompt structure.
+## The "Amalthea" Pattern
+
+When using StateBase with OpenAI, we recommend a specific prompting pattern to maximize reliability: **Context Injection**.
+
+Instead of sending the raw chat history array to OpenAI, you let StateBase curate the context.
+
+### Code Example
+
+```python
+from openai import OpenAI
+from statebase import StateBase
+
+client = OpenAI()
+sb = StateBase()
+
+# 1. Fetch Curated Context
+# StateBase automatically ranks recent turns + relevant memories
+context_package = sb.sessions.get_context(
+    session_id="sess_123",
+    query="How does the user like their coffee?"
+)
+
+# 2. Construct Prompt
+messages = [
+    {
+        "role": "system", 
+        "content": f"""
+        You are a helpful assistant.
+        
+        # PREVIOUS KNOWLEDGE
+        {context_package.memories_str}
+        
+        # CURRENT STATE
+        {context_package.state_str}
+        
+        # RECENT HISTORY
+        {context_package.recent_history_str}
+        """
+    },
+    {"role": "user", "content": "Order me a coffee."}
+]
+
+# 3. Generate
+completion = client.chat.completions.create(
+    model="gpt-4-turbo",
+    messages=messages
+)
+```
+
+## Why this works better?
+
+1.  **Token Efficiency**: You don't send 50 turns of history. You send a summarized state + 5 relevant turns.
+2.  **Accuracy**: "Memories" (long-term facts) are injected explicitly, preventing the model from having to "search" its context window.
+3.  **Cost**: Significantly reduces input token costs for long-running sessions.

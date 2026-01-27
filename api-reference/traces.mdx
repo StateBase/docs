@@ -1,4 +1,77 @@
 ---
 title: "Traces API"
-openapi: "GET /v1/traces"
+description: "Audit logging and decision tracking"
 ---
+
+<Note>
+**Traces** are immutable logs of every decision, state change, or API call made within the system. They are crucial for compliance, debugging, and "Explainable AI".
+</Note>
+
+## List Traces
+
+<ParamField query="session_id" type="string">
+  Filter traces by session.
+</ParamField>
+
+<ParamField query="action" type="string">
+  Filter by action type (e.g. `state.update`, `memory.create`, `turn.add`).
+</ParamField>
+
+<ParamField query="resource_type" type="string">
+  Filter by affected resource (`session`, `memory`, `turn`).
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl "https://api.statebase.org/v1/traces?session_id=sess_123&action=state.update" \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "trace_999...",
+      "timestamp": "2026-01-27T10:06:00Z",
+      "action": "state.update",
+      "actor": "system",
+      "resource_type": "session",
+      "resource_id": "sess_123"
+    }
+  ],
+  "has_more": false
+}
+```
+</CodeGroup>
+
+## Get Trace Details
+
+Retrieves the full context (IP address, user agent, exact diff) of a specific trace.
+
+<ParamField path="trace_id" type="string" required>
+  The ID of the trace.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl https://api.statebase.org/v1/traces/trace_999... \
+  -H "Authorization: Bearer <token>"
+```
+
+```json Response
+{
+  "id": "trace_999...",
+  "action": "state.update",
+  "details": {
+    "prev_value": "draft",
+    "new_value": "published",
+    "field": "status"
+  },
+  "context": {
+    "request_id": "req_123...",
+    "api_key_id": "key_456..."
+  },
+  "ip_address": "10.0.0.1"
+}
+```
+</CodeGroup>
