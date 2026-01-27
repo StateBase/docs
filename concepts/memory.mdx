@@ -1,23 +1,57 @@
 ---
-title: "Semantic Memory"
-description: "Long-term storage for your agents"
+title: 'The Snap Algorithm'
+description: 'How StateBase handles semantic memory formation'
 ---
 
-## Memory Formation
+## Overview
 
-StateBase automatically extracts semantic entities from your turns if configured.
+StateBase doesn't just store logs. It uses an asynchronous background process called **SNAP** (Semantic Network Accumulation Protocol) to form long-term memories.
 
-1.  **Extraction**: NLP parser identifies proper nouns and facts.
-2.  **Deduplication**: Checks against existing Knowledge Graph.
-3.  **Upsert**: Updates the `Entity` table.
+<Steps>
+  <Step title="Ingestion">
+    Every `turn` you log is pushed to a high-throughput write buffer.
+  </Step>
+  <Step title="Extraction">
+    A lightweight NLP model scans the turn for **Named Entities** and **Facts**.
+    *   "User mentioned they live in **Seattle**."
+    *   "User prefers **Python** over **Java**."
+  </Step>
+  <Step title="Consolidation">
+    The extracted facts are compared against the session's Knowledge Graph.
+    *   If **New**: Create a new node.
+    *   If **Conflict**: Flag for Drift Detection.
+    *   If **Reinforcement**: Increase confidence score.
+  </Step>
+  <Step title="Indexing">
+    Facts are embedded into our vector store for semantic retrieval.
+  </Steps>
+</Steps>
 
-## Retrieval
+## Memory Scope
 
-When creating a new turn, you can request `context`:
+Memories can be scoped to different levels of persistence.
+
+| Scope | Description | Persistence |
+| :--- | :--- | :--- |
+| `session` | Ephemeral facts relevant only to the current task. | Cleared on session close. |
+| `user` | Facts about a specific user across all their agents. | Permanent. |
+| `global` | Facts shared across all users/agents (e.g., world knowledge). | Permanent. |
+
+## Usage
+
+You don't need to manually trigger SNAP. It runs automatically. However, you can manually query the memory store.
 
 ```python
-sb.sessions.get_context(
-    query="What did the user say about tax law?",
-    limit=5
+# Semantic Search over user's long-term memory
+memories = sb.memory.search(
+    user_id="user_123",
+    query="What is the user's preferred coding style?",
+    limit=3
 )
+
+# Output: ["User prefers snake_case variables", "User uses TypeHints everywhere"]
 ```
+
+<Tip>
+Use `sb.memory.add()` to manually inject facts (e.g., from an onboarding form) without a chat interaction.
+</Tip>

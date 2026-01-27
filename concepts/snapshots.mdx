@@ -1,22 +1,59 @@
 ---
-title: "Snapshots & Rollback"
-description: "Time-travel for AI"
+title: 'Instant Rollback'
+description: 'Recover from hallucinations in milliseconds'
 ---
 
-## Architecture
+## The Problem: Logic Loops
 
-StateBase uses a copy-on-write mechanism for state storage. Every Turn produces a `Snapshot` hash.
+Agents often get stuck. A small hallucination in turn #3 propagates into a complete logic failure by turn #10. Traditional databases make "undoing" this painful.
 
-## Rollback
+## The Solution: Deterministic State Pointers
 
-To revert an agent:
+StateBase implements a Git-like tree structure for your agent's state.
 
-```http
-POST /v1/sessions/{id}/rollback
-Body: { "target_turn_id": "turn_456" }
+*   Every Turn has a `parent_hash`.
+*   Rollbacks are just pointer moves.
+
+## Implementing a "Retry" Button
+
+Here is how to implement a "Regenerate" feature in your UI using StateBase.
+
+### 1. Detect Failure
+User clicks "This answer is wrong".
+
+### 2. Rollback API
+
+Send a request to revert the session state to `Turn N-1`.
+
+```typescript
+await sb.sessions.rollback({
+    sessionId: "sess_123",
+    targetTurnId: "turn_098" // The ID of the last "good" turn
+});
 ```
 
-This:
-1.  Marks turns after `turn_456` as "orphaned".
-2.  Resets the `current_state` pointer to `turn_456`.
-3.  Returns the state object of that turn.
+### 3. Re-run Agent
+
+Now, run your agent loop again with the *same* history context. Because the state pointer moved back, the "bad" turn effectively never happened.
+
+```python
+# Fetch context (now reflecting the state BEFORE the error)
+context = sb.session.get_context("sess_123")
+
+# Re-prompt LLM
+new_response = llm.generate(context)
+```
+
+## Forking Sessions
+
+You can also **Fork** a session to explore alternative reasoning paths without losing the original.
+
+```python
+# Creates a parallel universe copy of the session
+fork_id = sb.sessions.fork(
+    source_session_id="sess_123",
+    at_turn_id="turn_050"
+)
+```
+
+This is incredibly powerful for **A/B Testing** prompts or debugging complex agent behaviors.

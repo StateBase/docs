@@ -1,24 +1,100 @@
 ---
-title: "Sessions & Turns"
-description: "The atomic units of StateBase"
+title: 'Session Management'
+description: 'Handling continuous state across infinite turns'
 ---
 
-## Sessions
+<Note>
+A **Session** is the immutable container for an agent's lifecycle. It guarantees sequential integrity of state transitions.
+</Note>
 
-A `Session` is the top-level container for a continuous thread of interaction. It correlates to a unique `session_id`.
+## The Session Object
+
+StateBase treats every session as a cryptographically verifiable ledger.
 
 ```json
 {
-  "id": "sess_123",
-  "agent_id": "finance_v1",
+  "id": "sess_01H1V2...",
+  "agent_id": "finance_research_v1",
+  "user_id": "usr_8923",
   "created_at": "2026-01-27T10:00:00Z",
+  "current_turn_id": "turn_01H1V3...",
   "metadata": {
-    "user_tier": "pro"
+    "environment": "production",
+    "region": "us-east-1"
   }
 }
 ```
 
-## Turns
+## Creating a Session
 
-A `Turn` represents a single atomic state transition—user input, agent loop, and output.
-StateBase treats turns as immutable ledger entries.
+<CodeGroup>
+```python Python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_live_...")
+
+session = sb.sessions.create(
+    agent_id="coding_agent",
+    user_id="user_123",
+    metadata={"model": "gpt-4-turbo"}
+)
+print(f"Session started: {session.id}")
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/client';
+
+const sb = new StateBase({ apiKey: process.env.SB_API_KEY });
+
+const session = await sb.sessions.create({
+  agentId: 'coding_agent',
+  userId: 'user_123',
+  metadata: { model: 'gpt-4-turbo' }
+});
+
+console.log(`Session started: ${session.id}`);
+```
+
+```bash cURL
+curl -X POST https://api.statebase.org/v1/sessions \
+  -H "Authorization: Bearer sb_live_..." \
+  -d '{"agent_id": "coding_agent", "user_id": "user_123"}'
+```
+</CodeGroup>
+
+## State Retrieval
+
+You can fetch the entire state history or just the latest snapshot.
+
+### Method 1: Full History
+
+Ideal for audit logs or post-mortem debugging.
+
+```python
+history = sb.sessions.get_history(session.id)
+for turn in history:
+    print(f"Turn {turn.index}: {turn.input} -> {turn.output}")
+```
+
+### Method 2: Current Context
+
+Optimized for injecting into your LLM's prompt window.
+
+```python
+# Returns the last N turns + relevant long-term memories
+context = sb.sessions.get_context(
+    session_id=session.id,
+    limit=10, 
+    include_memory=True
+)
+
+prompt = f"""
+System: You are a helpful assistant.
+Context: {context.to_string()}
+User: {user_input}
+"""
+```
+
+<Warning>
+**Latency Tip**: `get_context` is served from our Edge Cache (avg < 50ms). Do not query the main database directly in your hot path.
+</Warning>

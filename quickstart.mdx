@@ -1,16 +1,17 @@
 ---
 title: 'Quickstart'
-description: 'Add StateBase to your agent in under 2 minutes'
+description: 'From zero to production-grade state management in 2 minutes.'
 ---
 
-## Setup
+<Info>
+**Prerequisite**: Get your API Key from the [StateBase Dashboard](https://app.statebase.org).
+</Info>
 
-StateBase works as a sidecar to your existing agent loop. You don't need to rewrite your prompt engineering logic.
+## 1. Installation
 
-### 1. Install the SDK
+Install the lightweight SDK. It has zero heavy dependencies (like Torch or Transformers).
 
 <CodeGroup>
-
 ```bash Python
 pip install statebase-sdk
 ```
@@ -18,68 +19,93 @@ pip install statebase-sdk
 ```bash TypeScript
 npm install @statebase/client
 ```
-
 </CodeGroup>
 
-### 2. Initialize the Client
+## 2. Hello World
 
-Get your API Key from the [Dashboard](https://app.statebase.org/settings/keys).
+Let's build a simple chat loop that remembers user details.
 
 <CodeGroup>
-
 ```python Python
+import os
 from statebase import StateBase
+from openai import OpenAI
 
-sb = StateBase(api_key="sb_live_...")
+# Initialize
+sb = StateBase(api_key=os.getenv("STATEBASE_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 
-# Create a new session
-session = sb.sessions.create(
-    agent_id="finance-agent-v1",
-    user_id="user_123"
-)
+# Create a session for a user
+session = sb.sessions.create(user_id="alex_doe", agent_id="demo_bot")
+
+while True:
+    user_input = input("You: ")
+    
+    # 1. GET CONTEXT: Auto-fetches relevant long-term memories
+    context = sb.sessions.get_context(session.id, query=user_input)
+    
+    # 2. GENERATE: Feed context to LLM
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": f"Context: {context}"},
+            {"role": "user", "content": user_input}
+        ]
+    )
+    ai_response = response.choices[0].message.content
+    print(f"AI: {ai_response}")
+    
+    # 3. LOG TURN: StateBase saves the interaction and updates memory
+    sb.sessions.add_turn(
+        session_id=session.id,
+        input=user_input,
+        output=ai_response
+    )
 ```
 
 ```typescript TypeScript
 import { StateBase } from '@statebase/client';
+import OpenAI from 'openai';
 
-const sb = new StateBase({ apiKey: 'sb_live_...' });
+const sb = new StateBase({ apiKey: process.env.SB_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_KEY });
 
-// Create a new session
-const session = await sb.sessions.create({
-  agentId: 'finance-agent-v1',
-  userId: 'user_123'
-});
+async function main() {
+  const session = await sb.sessions.create({ userId: 'alex_doe', agentId: 'demo_bot' });
+  
+  // 1. GET CONTEXT
+  const context = await sb.sessions.getContext({ sessionId: session.id });
+  
+  // 2. GENERATE
+  const completion = await openai.chat.completions.create({
+      messages: [{ role: 'system', content: `Context: ${context}` }],
+      model: 'gpt-4',
+  });
+  
+  // 3. LOG TURN
+  await sb.sessions.addTurn({
+      sessionId: session.id,
+      input: "User Input...",
+      output: completion.choices[0].message.content
+  });
+}
 ```
-
 </CodeGroup>
 
-### 3. Log a Turn
+## What just happened?
 
-After your LLM generates a response, log the interaction. StateBase automatically handles diffing and memory formation.
-
-```python
-# Your existing agent logic
-response = llm.chat(messages)
-
-# Log to StateBase
-sb.sessions.add_turn(
-    session_id=session.id,
-    input=user_input,
-    output=response.content,
-    metadata={
-        "tokens": response.usage.total_tokens,
-        "model": "gpt-4-turbo"
-    }
-)
-```
+By adding **3 lines of code**, you gave your agent:
+1.  **Infinite Memory**: It will recall "Alex Doe" in a session 2 weeks from now.
+2.  **Audit Logs**: Every turn is visible in the StateBase Dashboard.
+3.  **Drift Protection**: If the agent hallucinates, you can rollback the session state.
 
 ## Next Steps
 
-<CardGroup>
-  <Card title="Understanding State" icon="chart-network" href="/concepts/sessions">
-    Learn how StateBase versions your agent's context.
+<CardGroup cols={2}>
+  <Card title="Advanced Memory" icon="brain" href="/concepts/memory">
+    Learn how to scope memories to specific users or organizations.
   </Card>
-  <Card title="Browse API" icon="code" href="/api-reference">
-    View the full REST API documentation.
+  <Card title="Drift Guard" icon="shield-check" href="/concepts/snapshots">
+    Configure automated validation rules for your agent's output.
   </Card>
 </CardGroup>
