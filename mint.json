@@ -15,27 +15,9 @@
         "type": "github",
         "url": "https://github.com/statebase/statebase"
     },
-    "tabs": [
-        {
-            "name": "API Reference",
-            "url": "api-reference"
-        }
-    ],
-    "anchors": [
-        {
-            "name": "Dashboard",
-            "icon": "chart-network",
-            "url": "https://app.statebase.org"
-        },
-        {
-            "name": "Website",
-            "icon": "globe",
-            "url": "https://statebase.org"
-        }
-    ],
     "navigation": [
         {
-            "group": "Get Started",
+            "group": "Welcome",
             "pages": [
                 "introduction",
                 "quickstart",
@@ -43,25 +25,37 @@
             ]
         },
         {
-            "group": "Core Concepts",
+            "group": "Guides",
             "pages": [
                 "concepts/sessions",
                 "concepts/memory",
-                "concepts/semantic-search",
                 "concepts/snapshots"
             ]
         },
         {
-            "group": "SDKs",
+            "group": "Cookbook",
             "pages": [
-                "sdks/python",
-                "sdks/typescript"
+                "cookbook/langchain",
+                "cookbook/vercel-ai-sdk",
+                "cookbook/telegram-bot"
+            ]
+        },
+        {
+            "group": "Integrations",
+            "pages": [
+                "integrations/openai",
+                "integrations/anthropic",
+                "integrations/postgres"
             ]
         },
         {
             "group": "API Reference",
             "pages": [
-                "api-reference/introduction"
+                "api-reference/introduction",
+                "api-reference/sessions",
+                "api-reference/turns",
+                "api-reference/memory",
+                "api-reference/traces"
             ]
         }
     ],
