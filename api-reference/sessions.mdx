@@ -1,4 +1,91 @@
 ---
 title: "Sessions API"
-openapi: "POST /v1/sessions"
+description: "Manage agent sessions directly via REST"
 ---
+
+<Note>
+Sessions are the top-level containers for all agent interactions. They persist state, memory, and history.
+</Note>
+
+## Create Session
+
+<ParamField body="agent_id" type="string" required>
+  Unique identifier for the agent (e.g., `finance_bot_v1`).
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Arbitrary JSON key-value pairs for application context (e.g., user tier, region).
+</ParamField>
+
+<ParamField body="initial_state" type="object">
+  The starting state payload for the session.
+</ParamField>
+
+<ParamField body="ttl_seconds" type="integer" default="86400">
+  Time-to-live in seconds. Default is 24 hours. Max is 30 days.
+</ParamField>
+
+<ResponseField name="id" type="string">
+  The unique session ID (e.g., `sess_01H...`).
+</ResponseField>
+
+<ResponseField name="ttl_expires_at" type="string">
+  ISO 8601 timestamp when the session will auto-delete.
+</ResponseField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.statebase.org/v1/sessions \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "coding_agent",
+    "metadata": { "env": "prod" },
+    "ttl_seconds": 3600
+  }'
+```
+
+```json Response
+{
+  "object": "session",
+  "id": "sess_01H...",
+  "agent_id": "coding_agent",
+  "created_at": "2026-01-27T10:00:00Z",
+  "metadata": { "env": "prod" },
+  "state": {},
+  "memory_count": 0,
+  "turn_count": 0,
+  "ttl_expires_at": "2026-01-27T11:00:00Z"
+}
+```
+</CodeGroup>
+
+## Get Session
+
+Retrieve the full context including current state.
+
+<ParamField path="session_id" type="string" required>
+  The ID of the session to retrieve.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl https://api.statebase.org/v1/sessions/sess_01H... \
+  -H "Authorization: Bearer <token>"
+```
+</CodeGroup>
+
+## Delete Session
+
+Permanently remove a session and all its distributed state (Redis + Postgres + Vector DB).
+
+<ParamField path="session_id" type="string" required>
+  The ID of the session to delete.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.statebase.org/v1/sessions/sess_01H... \
+  -H "Authorization: Bearer <token>"
+```
+</CodeGroup>
