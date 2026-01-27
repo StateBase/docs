@@ -1,0 +1,44 @@
+---
+title: "Memory Scopes"
+description: "User, Agent, and Global memory tiers"
+---
+
+StateBase organizes memory into three distinct scopes to ensure relevant retrieval.
+
+## 1. Session Scope (Short-term)
+**Lifetime**: Ephemeral (Session duration)
+**Use Case**: The current conversation thread. "Refer to the code I just pasted."
+
+Context stored here is automatically prioritized for the immediate next turn but decays rapidly in relevance for future sessions.
+
+## 2. User Scope (Long-term)
+**Lifetime**: Permanent (until deleted)
+**Use Case**: Personalization. "My name is Sarah", "I prefer Python".
+
+This content follows the `user_id` across *all* agents they interact with in your application.
+
+```python
+sb.memory.add(
+    user_id="user_123", # <--- Scoped to User
+    content="User is a vegetarian."
+)
+```
+
+## 3. Agent Scope (Knowledge Base)
+**Lifetime**: Permanent
+**Use Case**: Specialized knowledge. "Our company return policy is 30 days."
+
+This is read-only context available to specific `agent_id` instances, regardless of which user they are talking to.
+
+```python
+sb.memory.add(
+    agent_id="support_bot_v1", # <--- Scoped to Agent
+    content="Support hours are 9am-5pm EST."
+)
+```
+
+## 4. Global Scope (Organization)
+**Lifetime**: Permanent
+**Use Case**: World truths. "The sky is blue", "Our stock ticker is $STB".
+
+Available to every agent and user in your workspace.

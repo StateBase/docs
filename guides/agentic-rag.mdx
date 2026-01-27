@@ -1,0 +1,41 @@
+---
+title: "Agentic RAG"
+description: "Building autonomous retrieval pipelines"
+---
+
+Traditional RAG is passive: User asks -> System searches -> LLM answers.
+**Agentic RAG** is active: Agent decides *what* to search, *verify* results, and *iterate*.
+
+## How StateBase Powers Agentic RAG
+
+StateBase serves as the **Store** and **Trace** layer for this loop.
+
+### The Loop
+
+1.  **Reasoning**: Agent thinks "I need to check the pricing page."
+2.  **Tool Call**: Agent calls `search_tool("pricing")`.
+3.  **State Update**: StateBase records the tool call and the raw result.
+4.  **Reflection**: Agent analyzes result. "This is outdated 2024 pricing."
+5.  **Refinement**: Agent calls `search_tool("pricing 2025")`.
+
+### Implementation
+
+```python
+# 1. Decision Step
+state = sb.sessions.get_state(session_id)
+action = agent.decide(state)
+
+if action == "search":
+    # 2. Tool Execution
+    result = search_tool.run(query)
+    
+    # 3. State Preservation
+    sb.sessions.add_turn(
+        input={"type": "tool_result", "content": result},
+        output={"type": "thought", "content": "Analyzing pricing data..."}
+    )
+```
+
+<Note>
+By storing the **intermediate thought process** (Reasoning traces) in StateBase, your agent can "learn" from failed retrieval attempts in future sessions.
+</Note>

@@ -39,11 +39,18 @@
             ]
         },
         {
-            "group": "Guides",
+            "group": "Core Concepts",
             "pages": [
                 "concepts/sessions",
                 "concepts/memory",
+                "concepts/memory-scopes",
                 "concepts/snapshots"
+            ]
+        },
+        {
+            "group": "Guides",
+            "pages": [
+                "guides/agentic-rag"
             ]
         },
         {
