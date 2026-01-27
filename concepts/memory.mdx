@@ -1,0 +1,23 @@
+---
+title: "Semantic Memory"
+description: "Long-term storage for your agents"
+---
+
+## Memory Formation
+
+StateBase automatically extracts semantic entities from your turns if configured.
+
+1.  **Extraction**: NLP parser identifies proper nouns and facts.
+2.  **Deduplication**: Checks against existing Knowledge Graph.
+3.  **Upsert**: Updates the `Entity` table.
+
+## Retrieval
+
+When creating a new turn, you can request `context`:
+
+```python
+sb.sessions.get_context(
+    query="What did the user say about tax law?",
+    limit=5
+)
+```

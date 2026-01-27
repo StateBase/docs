@@ -1,0 +1,10 @@
+---
+title: "Architecture"
+description: "High-level system design"
+---
+
+<img src="/images/arch-diagram.png" alt="Architecture" />
+
+StateBase sits between your **Agent Runtimes** (e.g., Python scripts, Vercel Edge Functions) and your **LLM Providers**.
+
+It acts as the "Hippocampus"—handling memory formation, retrieval, and state validation asynchronously.

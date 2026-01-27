@@ -1,0 +1,22 @@
+---
+title: "Snapshots & Rollback"
+description: "Time-travel for AI"
+---
+
+## Architecture
+
+StateBase uses a copy-on-write mechanism for state storage. Every Turn produces a `Snapshot` hash.
+
+## Rollback
+
+To revert an agent:
+
+```http
+POST /v1/sessions/{id}/rollback
+Body: { "target_turn_id": "turn_456" }
+```
+
+This:
+1.  Marks turns after `turn_456` as "orphaned".
+2.  Resets the `current_state` pointer to `turn_456`.
+3.  Returns the state object of that turn.

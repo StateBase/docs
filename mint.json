@@ -1,0 +1,73 @@
+{
+    "name": "StateBase",
+    "logo": {
+        "dark": "/logo/dark.svg",
+        "light": "/logo/light.svg"
+    },
+    "favicon": "/favicon.svg",
+    "colors": {
+        "primary": "#2563EB",
+        "light": "#2563EB",
+        "dark": "#2563EB",
+        "anchors": "#3B82F6"
+    },
+    "topbarCtaButton": {
+        "type": "github",
+        "url": "https://github.com/statebase/statebase"
+    },
+    "tabs": [
+        {
+            "name": "API Reference",
+            "url": "api-reference"
+        }
+    ],
+    "anchors": [
+        {
+            "name": "Dashboard",
+            "icon": "chart-network",
+            "url": "https://app.statebase.org"
+        },
+        {
+            "name": "Website",
+            "icon": "globe",
+            "url": "https://statebase.org"
+        }
+    ],
+    "navigation": [
+        {
+            "group": "Get Started",
+            "pages": [
+                "introduction",
+                "quickstart",
+                "architecture"
+            ]
+        },
+        {
+            "group": "Core Concepts",
+            "pages": [
+                "concepts/sessions",
+                "concepts/memory",
+                "concepts/semantic-search",
+                "concepts/snapshots"
+            ]
+        },
+        {
+            "group": "SDKs",
+            "pages": [
+                "sdks/python",
+                "sdks/typescript"
+            ]
+        },
+        {
+            "group": "API Reference",
+            "pages": [
+                "api-reference/introduction"
+            ]
+        }
+    ],
+    "footerSocials": {
+        "x": "https://x.com/statebase",
+        "github": "https://github.com/statebase",
+        "linkedin": "https://linkedin.com/company/statebase"
+    }
+}

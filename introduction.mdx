@@ -1,0 +1,60 @@
+---
+title: Introduction
+description: "The Reliability Layer for Production AI Agents"
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.png"
+  alt="Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.png"
+  alt="Hero Dark"
+/>
+
+## What is StateBase?
+
+StateBase is an infrastructure layer designed to solve the "Amalthea Problem" in autonomous agents: **State Drift**.
+
+As agents execute long-running tasks, their context window gets polluted, their logic loops, and they "forget" constraints set in previous turns. StateBase provides a deterministic file system for your agent's mind.
+
+<CardGroup cols={2}>
+  <Card
+    title="Session Management"
+    icon="layer-group"
+    href="/concepts/sessions"
+  >
+    Maintain perfect state continuity across infinite turns.
+  </Card>
+  <Card
+    title="Semantic Memory"
+    icon="brain"
+    href="/concepts/memory"
+  >
+    Automatic long-term memory formation and retrieval.
+  </Card>
+  <Card
+    title="Instant Rollback"
+    icon="clock-rotate-left"
+    href="/concepts/snapshots"
+  >
+    Revert your agent to any previous state with one API call.
+  </Card>
+  <Card
+    title="Decision Tracing"
+    icon="magnifying-glass-chart"
+    href="/architecture"
+  >
+    Full audit logs of why your agent did what it did.
+  </Card>
+</CardGroup>
+
+## Why StateBase?
+
+StateBase is built for developers who are done with toy demos and are deploying **mission-critical agents** in Fintech, Healthcare, and Enterprise environments.
+
+1.  **Framework Agnostic**: Works with LangChain, LlamaIndex, AutoGen, or raw OpenAI API.
+2.  **Zero Latency Overhead**: Asynchronous architecture ensures your UX stays snappy.
+3.  **Compliance Ready**: Every state change is hashed and auditable.

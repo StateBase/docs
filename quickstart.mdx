@@ -1,0 +1,85 @@
+---
+title: 'Quickstart'
+description: 'Add StateBase to your agent in under 2 minutes'
+---
+
+## Setup
+
+StateBase works as a sidecar to your existing agent loop. You don't need to rewrite your prompt engineering logic.
+
+### 1. Install the SDK
+
+<CodeGroup>
+
+```bash Python
+pip install statebase-sdk
+```
+
+```bash TypeScript
+npm install @statebase/client
+```
+
+</CodeGroup>
+
+### 2. Initialize the Client
+
+Get your API Key from the [Dashboard](https://app.statebase.org/settings/keys).
+
+<CodeGroup>
+
+```python Python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_live_...")
+
+# Create a new session
+session = sb.sessions.create(
+    agent_id="finance-agent-v1",
+    user_id="user_123"
+)
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/client';
+
+const sb = new StateBase({ apiKey: 'sb_live_...' });
+
+// Create a new session
+const session = await sb.sessions.create({
+  agentId: 'finance-agent-v1',
+  userId: 'user_123'
+});
+```
+
+</CodeGroup>
+
+### 3. Log a Turn
+
+After your LLM generates a response, log the interaction. StateBase automatically handles diffing and memory formation.
+
+```python
+# Your existing agent logic
+response = llm.chat(messages)
+
+# Log to StateBase
+sb.sessions.add_turn(
+    session_id=session.id,
+    input=user_input,
+    output=response.content,
+    metadata={
+        "tokens": response.usage.total_tokens,
+        "model": "gpt-4-turbo"
+    }
+)
+```
+
+## Next Steps
+
+<CardGroup>
+  <Card title="Understanding State" icon="chart-network" href="/concepts/sessions">
+    Learn how StateBase versions your agent's context.
+  </Card>
+  <Card title="Browse API" icon="code" href="/api-reference">
+    View the full REST API documentation.
+  </Card>
+</CardGroup>
