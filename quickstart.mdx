@@ -1,6 +1,6 @@
 ---
 title: 'Quickstart'
-description: 'From zero to production-grade state management in 2 minutes.'
+description: 'Go from stateless to persistent in under 2 minutes.'
 ---
 
 <Info>
@@ -9,103 +9,87 @@ description: 'From zero to production-grade state management in 2 minutes.'
 
 ## 1. Installation
 
-Install the lightweight SDK. It has zero heavy dependencies (like Torch or Transformers).
+Install the StateBase SDK. It is lightweight, async-first, and has zero heavy machine-learning dependencies.
 
 <CodeGroup>
 ```bash Python
-pip install statebase-sdk
+pip install statebase
 ```
 
 ```bash TypeScript
-npm install @statebase/client
+npm install @statebase/node
 ```
 </CodeGroup>
 
-## 2. Hello World
+## 2. Your First Persistent Agent
 
-Let's build a simple chat loop that remembers user details.
+In this example, we'll build a simple chat loop using **Gemini 2.0-Flash**. StateBase will automatically handle context retrieval and state updates to ensure the agent remembers the user across restarts.
 
-<CodeGroup>
-```python Python
+```python
 import os
 from statebase import StateBase
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
-# Initialize
-sb = StateBase(api_key=os.getenv("STATEBASE_KEY"))
-client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
+# 1. Initialize Clients
+sb = StateBase(api_key="sb_live_...")
+gemini = genai.Client(api_key="GEMINI_API_KEY")
 
-# Create a session for a user
-session = sb.sessions.create(user_id="alex_doe", agent_id="demo_bot")
+# 2. Start (or Resume) a Session
+# StateBase Resolve ownership automatically via your API Key
+session = sb.sessions.create(
+    agent_id="support-agent-v1",
+    initial_state={"status": "onboarding", "interaction_count": 0}
+)
 
-while True:
+def chat():
     user_input = input("You: ")
     
-    # 1. GET CONTEXT: Auto-fetches relevant long-term memories
-    context = sb.sessions.get_context(session.id, query=user_input)
-    
-    # 2. GENERATE: Feed context to LLM
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": f"Context: {context}"},
-            {"role": "user", "content": user_input}
-        ]
+    # 3. RETRIEVE: Fetch consolidated context (State + Relevant Memories + History)
+    context = sb.sessions.get_context(
+        session_id=session.id, 
+        query=user_input,
+        memory_limit=5
     )
-    ai_response = response.choices[0].message.content
-    print(f"AI: {ai_response}")
     
-    # 3. LOG TURN: StateBase saves the interaction and updates memory
+    # 4. THINK: Feed the context directly into the System Prompt
+    response = gemini.models.generate_content(
+        model="gemini-2.0-flash",
+        config=types.GenerateContentConfig(
+            system_instruction=f"Current Agent State: {context['state']}\nRelevant Memories: {context['memories']}"
+        ),
+        contents=user_input
+    )
+    
+    ai_output = response.text
+    print(f"AI: {ai_output}")
+    
+    # 5. PERSIST: Save the interaction for auditability and memory
     sb.sessions.add_turn(
         session_id=session.id,
         input=user_input,
-        output=ai_response
+        output=ai_output
     )
+
+if __name__ == "__main__":
+    chat()
 ```
 
-```typescript TypeScript
-import { StateBase } from '@statebase/client';
-import OpenAI from 'openai';
+## 3. Verify on the Dashboard
 
-const sb = new StateBase({ apiKey: process.env.SB_KEY });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_KEY });
+Head over to the [StateBase Dashboard](https://app.statebase.org/dashboard/sessions) to see your session in action. You'll find:
 
-async function main() {
-  const session = await sb.sessions.create({ userId: 'alex_doe', agentId: 'demo_bot' });
-  
-  // 1. GET CONTEXT
-  const context = await sb.sessions.getContext({ sessionId: session.id });
-  
-  // 2. GENERATE
-  const completion = await openai.chat.completions.create({
-      messages: [{ role: 'system', content: `Context: ${context}` }],
-      model: 'gpt-4',
-  });
-  
-  // 3. LOG TURN
-  await sb.sessions.addTurn({
-      sessionId: session.id,
-      input: "User Input...",
-      output: completion.choices[0].message.content
-  });
-}
-```
-</CodeGroup>
+- **Complete Trace**: Real-time log of every turn.
+- **State Diff**: Exactly how the agent's internal state changed.
+- **Memory Bank**: Key facts the agent has extracted and saved for the long term.
 
-## What just happened?
-
-By adding **3 lines of code**, you gave your agent:
-1.  **Infinite Memory**: It will recall "Alex Doe" in a session 2 weeks from now.
-2.  **Audit Logs**: Every turn is visible in the StateBase Dashboard.
-3.  **Drift Protection**: If the agent hallucinates, you can rollback the session state.
-
-## Next Steps
+## What's next?
 
 <CardGroup cols={2}>
-  <Card title="Advanced Memory" icon="brain" href="/concepts/memory">
-    Learn how to scope memories to specific users or organizations.
+  <Card title="Concept: Sessions" icon="bolt" href="/concepts/sessions">
+    Understand how sessions act as immutable ledgers for agent logic.
   </Card>
-  <Card title="Drift Guard" icon="shield-check" href="/concepts/snapshots">
-    Configure automated validation rules for your agent's output.
+  <Card title="The Senior Pattern" icon="brain" href="/advanced/patterns">
+    Implementation of autonomous state updates and memory extraction.
   </Card>
 </CardGroup>

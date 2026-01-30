@@ -1,14 +1,83 @@
 ---
 title: "Python SDK"
-description: "Official Python Client"
+description: "Async-ready, lightweight client for StateBase."
 ---
+
+The StateBase Python SDK is the recommended way to integrate with our infrastructure. It is designed to be lightweight with minimal dependencies.
 
 ## Installation
 
 ```bash
-pip install statebase-sdk
+pip install statebase
 ```
 
-## Reference
+## Initialization
 
-See the full [PyPI Page](https://pypi.org/project/statebase-sdk).
+```python
+from statebase import StateBase
+
+# Initialize with your API Key (resolves user ownership automatically)
+sb = StateBase(api_key="sb_live_...")
+```
+
+## Sessions
+
+### Create or Resume
+```python
+session = sb.sessions.create(
+    agent_id="my-agent",
+    initial_state={"status": "initializing"}
+)
+```
+
+### Get Context (Consolidated)
+The `get_context` call is optimized for agent prompts. It fetches State, Memories, and Turns in a single low-latency call.
+
+```python
+context = sb.sessions.get_context(
+    session_id=session.id,
+    query="What does the user like?",
+    memory_limit=5,
+    turn_limit=10
+)
+
+# context['state'] -> dict
+# context['memories'] -> list of dicts with scores
+# context['recent_turns'] -> list of turns
+```
+
+### Update State
+```python
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"status": "completed", "user_ready": True},
+    reasoning="User confirmed onboarding"
+)
+```
+
+## Memory
+
+### Manual Injection
+```python
+sb.memory.add(
+    content="User is allergic to peanuts.",
+    type="fact",
+    session_id=session.id,
+    tags=["medical", "preferences"]
+)
+```
+
+### Semantic Search
+```python
+results = sb.memory.search(
+    query="dietary restrictions",
+    limit=3,
+    threshold=0.8
+)
+```
+
+## Clean Up
+Always close the client if you are not using a context manager.
+```python
+sb.close()
+```

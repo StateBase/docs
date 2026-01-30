@@ -75,6 +75,61 @@ curl https://api.statebase.org/v1/sessions/sess_01H... \
 ```
 </CodeGroup>
 
+## Get Session Context
+
+The primary endpoint for building your agent's prompt. It performs a parallel lookup of the current State, relevant Semantic Memories (via vector search), and the most recent N turns.
+
+<ParamField path="session_id" type="string" required>
+  The ID of the session to retrieve.
+</ParamField>
+
+<ParamField body="query" type="string">
+  The search query for semantic memory retrieval (usually the user's current input).
+</ParamField>
+
+<ParamField body="memory_limit" type="integer" default="5">
+  Number of semantic memories to retrieve.
+</ParamField>
+
+<ParamField body="turn_limit" type="integer" default="5">
+  Number of recent conversation turns to include.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.statebase.org/v1/sessions/sess_01H.../context \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Where did I park my car?",
+    "memory_limit": 3
+  }'
+```
+
+```json Response
+{
+  "state": {
+    "status": "active",
+    "last_location": "Airport Level 4"
+  },
+  "memories": [
+    {
+      "content": "User parked in Section B2 of Level 4.",
+      "type": "fact",
+      "score": 0.94
+    }
+  ],
+  "recent_turns": [
+    {
+      "id": "turn_01H...",
+      "input": "I'm leaving for the flight now.",
+      "output": "Got it. I've noted your parking spot."
+    }
+  ]
+}
+```
+</CodeGroup>
+
 ## Delete Session
 
 Permanently remove a session and all its distributed state (Redis + Postgres + Vector DB).

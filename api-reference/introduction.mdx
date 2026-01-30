@@ -3,14 +3,22 @@ title: "API Introduction"
 description: "REST API V1.0"
 ---
 
-StateBase provides a RESTful API.
+StateBase provides a high-performance RESTful API for managing agent continuity.
 
-**Base URL**: `https://api.statebase.org/v1`
+**Base URL**: `https://api.statebase.org`
 
 ## Authentication
 
-Identify with your API Key in the header:
+Authentication is performed via an API Key. You can provide it in one of two ways:
 
+### 1. Bearer Token (Recommended)
 ```http
 Authorization: Bearer sb_live_...
 ```
+
+### 2. Custom Header
+```http
+X-API-Key: sb_live_...
+```
+
+All requests must be served over HTTPS.

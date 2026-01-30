@@ -1,33 +1,20 @@
 ---
 title: Welcome to StateBase
-description: The Pareto Frontier for AI Context.
+description: Infrastructure for Persistent AI Agents.
 mode: "wide"
 ---
 
-<Hero>
-  <img
-    className="block dark:hidden"
-    src="/images/hero-light.png"
-    alt="Hero Light"
-  />
-  <img
-    className="hidden dark:block"
-    src="/images/hero-dark.png"
-    alt="Hero Dark"
-  />
-</Hero>
-
-StateBase is the **infrastructure layer** for reliable AI agents. We solve the "Amalthea Problem"—the inevitable drift and hallucination that occurs when LLMs run statelessly.
+StateBase is the **infrastructure layer** for reliable, stateful AI agents. We provide the persistence, memory, and auditability required to transform ephemeral LLM calls into predictable production software.
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="bolt" href="/quickstart">
     Build your first stateful agent in **2 minutes**.
   </Card>
-  <Card title="The Architecture" icon="sitemap" href="/advanced/architecture">
-    Understand the Entity Graph and SNAP algorithm.
+  <Card title="Core Concepts" icon="sitemap" href="/concepts/sessions">
+    Understand Sessions, State, and Semantic Memory.
   </Card>
-  <Card title="Cookbook" icon="book" href="/cookbook/langchain">
-    Copy-paste patterns for LangChain, Vercel AI, and more.
+  <Card title="Senior Agent Pattern" icon="brain" href="/advanced/patterns">
+    Implement the "Retrieve -> Think -> Act" loop.
   </Card>
   <Card title="API Reference" icon="code" href="/api-reference/introduction">
     Interactive OpenAPI documentation.
@@ -36,26 +23,26 @@ StateBase is the **infrastructure layer** for reliable AI agents. We solve the "
 
 ## Why StateBase?
 
-We replace brittle "Prompt Engineering" with deterministic **State Engineering**.
+Modern AI agents fail not because they aren't smart, but because they are **stateless**. StateBase replaces brittle prompt engineering with deterministic **State Engineering**.
 
 | Feature | StateBase | DIY / Vector DB |
 | :--- | :--- | :--- |
-| **Persistence** | **Sessions** (Immutable Ledger) | Ephemeral Logs |
-| **Context** | **Graph + Vector** (Semantic) | Naive Chunks |
-| **Logic** | **State Machines** | Probabilistic |
-| **Scale** | **Serverless** | Self-Managed |
+| **Logic Consistency** | **Deep Merge State** | Manual Context Passing |
+| **Long-term Knowledge** | **Semantic Memory** | Churned RAG Chunks |
+| **Observability** | **Decision Traces** | Raw Text Logs |
+| **Reliability** | **Instant Rollbacks** | Non-existent |
 
-## Explore by Use Case
+## Built for Production
 
 <CardGroup cols={3}>
-  <Card title="Personalization" icon="user" href="/concepts/memory">
-    Remember user preferences forever.
+  <Card title="High Performance" icon="gauge" href="/advanced/architecture">
+    Redis-backed hot state for < 50ms context retrieval.
   </Card>
-  <Card title="Auditability" icon="shield-check" href="/api-reference/traces">
-    Full replayability for every agent decision.
+  <Card title="Framework Agnostic" icon="square-code" href="/sdks/python">
+    Works with LangChain, CrewAI, PydanticAI, or Raw SDKs.
   </Card>
-  <Card title="Drift Control" icon="anchor" href="/concepts/snapshots">
-    Instant rollbacks when agents go off-rail.
+  <Card title="Open Standards" icon="microchip" href="/api-reference/introduction">
+    REST-first API with full OpenAPI/Swagger support.
   </Card>
 </CardGroup>
 
@@ -65,7 +52,7 @@ We replace brittle "Prompt Engineering" with deterministic **State Engineering**
   <Card title="GitHub" icon="github" href="https://github.com/statebase/statebase">
     Star us on GitHub.
   </Card>
-  <Card title="Discord" icon="discord" href="https://discord.gg/statebase">
-    Join the developer community.
+  <Card title="Dashboard" icon="layout" href="https://app.statebase.org">
+    Monitor your agents in real-time.
   </Card>
 </CardGroup>

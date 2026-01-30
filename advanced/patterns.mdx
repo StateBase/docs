@@ -1,6 +1,63 @@
 ---
-title: "Architecture Patterns"
-description: "Common design patterns"
+title: "Advanced Agent Patterns"
+description: "Implementation strategies for high-autonomy agents."
 ---
 
-Coming soon.
+Modern AI agents aren't just chat interfaces; they are autonomous loops. StateBase enables a "Senior Development" pattern where the agent manages its own state and memory via **Tagged Outputs**.
+
+## The Self-Managed State Pattern
+
+Instead of hard-coding logic to update the user's name or preferences, you can empower the agent to decide when and how to update its own state.
+
+### 1. The System Prompt
+Instruct the agent to use specific XML-style tags for state and memory updates.
+
+```markdown
+You are a persistent assistant. 
+1. If you learn something permanent about the user, wrap it in <memory>...</memory> tags.
+2. If you want to update your shared session state, wrap a JSON block in <state_update>...</state_update>.
+```
+
+### 2. The Implementation Loop
+In your Python code, you simply parse these tags from the agent's output and call the StateBase SDK.
+
+```python
+import re
+import json
+
+def process_agent_decision(session_id, raw_output):
+    # 1. Extract Memory
+    memory_match = re.search(r"<memory>(.*?)</memory>", raw_output, re.S)
+    if memory_match:
+        sb.memory.add(content=memory_match.group(1).strip(), session_id=session_id)
+    
+    # 2. Extract State Update
+    state_match = re.search(r"<state_update>(.*?)</state_update>", raw_output, re.S)
+    if state_match:
+        try:
+            new_state = json.loads(state_match.group(1).strip())
+            sb.sessions.update_state(session_id=session_id, state=new_state)
+        except json.JSONDecodeError:
+            pass
+
+    # 3. Clean output for the user
+    final_output = re.sub(r"<(memory|state_update)>.*?</\1>", "", raw_output, flags=re.S).strip()
+    return final_output
+```
+
+## Why this works
+This pattern shifts the complexity from the **Application Code** to the **AI Model**.
+- **Contextual Precision**: The agent knows exactly when a piece of information is a "fact" vs "noise".
+- **Infinite Expandability**: You can add new state fields (`user_mood`, `current_task_id`, `loyalty_score`) without touching your backend code.
+- **Traceability**: Because these tags appear in the raw output, they are captured in StateBase **Turns**, providing a perfect audit trail of *why* the agent updated its state.
+
+## Retrieval-Augmented Thinking (RAT)
+The standard RAG pattern is: `Retrieve -> Prompt -> Respond`. 
+With StateBase, you move to **RAT**:
+
+1.  **Retrieve**: Call `sb.sessions.get_context()` to get State + Short-term history + Long-term memories.
+2.  **Think**: Feed all context into the model.
+3.  **Act**: The model responds with text + state/memory tags.
+4.  **Persist**: The application updates StateBase.
+
+This creates a **re-entrant context loop** where every interaction makes the agent smarter and more consistent.
