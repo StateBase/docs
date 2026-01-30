@@ -27,12 +27,25 @@
     },
     "tabs": [
         {
+            "name": "Documentation",
+            "url": "introduction"
+        },
+        {
+            "name": "Guides & Patterns",
+            "url": "patterns/tool-calling"
+        },
+        {
             "name": "API Reference",
             "url": "api-reference/introduction"
+        },
+        {
+            "name": "Production Playbook",
+            "url": "playbook/when-to-checkpoint"
         }
     ],
     "navigation": [
         {
+            "tab": "Documentation",
             "group": "Start Here",
             "pages": [
                 "introduction",
@@ -42,6 +55,7 @@
             ]
         },
         {
+            "tab": "Documentation",
             "group": "Demos",
             "pages": [
                 "demos/hallucination-recovery",
@@ -50,6 +64,7 @@
             ]
         },
         {
+            "tab": "Documentation",
             "group": "Core Concepts",
             "pages": [
                 "concepts/mental-models",
@@ -61,15 +76,7 @@
             ]
         },
         {
-            "group": "SDKs",
-            "pages": [
-                "sdks/python",
-                "sdks/typescript",
-                "sdks/patterns",
-                "sdks/error-handling"
-            ]
-        },
-        {
+            "tab": "Guides & Patterns",
             "group": "Agent Patterns",
             "pages": [
                 "patterns/tool-calling",
@@ -80,6 +87,17 @@
             ]
         },
         {
+            "tab": "Guides & Patterns",
+            "group": "SDKs",
+            "pages": [
+                "sdks/python",
+                "sdks/typescript",
+                "sdks/patterns",
+                "sdks/error-handling"
+            ]
+        },
+        {
+            "tab": "Guides & Patterns",
             "group": "Integrations",
             "pages": [
                 "integrations/openai",
@@ -91,7 +109,17 @@
             ]
         },
         {
-            "group": "Production Playbook",
+            "tab": "Guides & Patterns",
+            "group": "Examples & Templates",
+            "pages": [
+                "templates/starter-agent",
+                "templates/production-agent",
+                "templates/failure-injection"
+            ]
+        },
+        {
+            "tab": "Production Playbook",
+            "group": "Strategy",
             "pages": [
                 "playbook/when-to-checkpoint",
                 "playbook/rollback-strategies",
@@ -100,7 +128,17 @@
             ]
         },
         {
-            "group": "Reference",
+            "tab": "Production Playbook",
+            "group": "Security & Reliability",
+            "pages": [
+                "security/data-handling",
+                "security/isolation-model",
+                "security/reliability-guarantees"
+            ]
+        },
+        {
+            "tab": "API Reference",
+            "group": "Endpoints",
             "pages": [
                 "api-reference/introduction",
                 "api-reference/sessions",
@@ -110,23 +148,7 @@
             ]
         },
         {
-            "group": "Examples & Templates",
-            "pages": [
-                "templates/starter-agent",
-                "templates/production-agent",
-                "templates/failure-injection"
-            ]
-        },
-        {
-            "group": "Security & Reliability",
-            "pages": [
-                "security/data-handling",
-                "security/isolation-model",
-                "security/reliability-guarantees"
-            ]
-        },
-        {
-            "group": "Changelog",
+            "group": "Other",
             "pages": [
                 "changelog"
             ]
