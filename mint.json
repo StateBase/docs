@@ -27,10 +27,6 @@
     },
     "tabs": [
         {
-            "name": "Documentation",
-            "url": "introduction"
-        },
-        {
             "name": "API Reference",
             "url": "api-reference/introduction"
         }
@@ -66,7 +62,7 @@
             ]
         },
         {
-            "group": "API Reference",
+            "group": "Reference",
             "pages": [
                 "api-reference/introduction",
                 "api-reference/sessions",
