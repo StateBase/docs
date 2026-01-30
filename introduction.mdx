@@ -4,20 +4,27 @@ description: Infrastructure for Persistent AI Agents.
 mode: "wide"
 ---
 
+<img
+  className="block dark:hidden"
+  src="/images/hero-dark.png"
+  alt="StateBase Infrastructure"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.png"
+  alt="StateBase Infrastructure"
+/>
+
+## Infrastructure for Continuity
+
 StateBase is the **infrastructure layer** for reliable, stateful AI agents. We provide the persistence, memory, and auditability required to transform ephemeral LLM calls into predictable production software.
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" icon="bolt" href="/quickstart">
+  <Card title="Quickstart" icon="bolt" href="/quickstart" color="#0EA5E9">
     Build your first stateful agent in **2 minutes**.
   </Card>
-  <Card title="Core Concepts" icon="sitemap" href="/concepts/sessions">
+  <Card title="Core Infrastructure" icon="sitemap" href="/concepts/sessions" color="#38BDF8">
     Understand Sessions, State, and Semantic Memory.
-  </Card>
-  <Card title="Senior Agent Pattern" icon="brain" href="/advanced/patterns">
-    Implement the "Retrieve -> Think -> Act" loop.
-  </Card>
-  <Card title="API Reference" icon="code" href="/api-reference/introduction">
-    Interactive OpenAPI documentation.
   </Card>
 </CardGroup>
 
@@ -25,24 +32,32 @@ StateBase is the **infrastructure layer** for reliable, stateful AI agents. We p
 
 Modern AI agents fail not because they aren't smart, but because they are **stateless**. StateBase replaces brittle prompt engineering with deterministic **State Engineering**.
 
-| Feature | StateBase | DIY / Vector DB |
-| :--- | :--- | :--- |
-| **Logic Consistency** | **Deep Merge State** | Manual Context Passing |
-| **Long-term Knowledge** | **Semantic Memory** | Churned RAG Chunks |
-| **Observability** | **Decision Traces** | Raw Text Logs |
-| **Reliability** | **Instant Rollbacks** | Non-existent |
+<CardGroup cols={2}>
+  <Card title="Logic Consistency" icon="microchip">
+    Deep merge state logic ensures your agent never loses its place in a complex workflow.
+  </Card>
+  <Card title="Long-term Knowledge" icon="brain">
+    Semantic memory storage allows agents to recall user preferences across months of inactivity.
+  </Card>
+  <Card title="Observability" icon="eye">
+    Decision traces provide every internal monologue and state change for perfect auditability.
+  </Card>
+  <Card title="Reliability" icon="rotate-left">
+    Instant rollbacks to any previous state version to recover from model hallucinations.
+  </Card>
+</CardGroup>
 
 ## Built for Production
 
 <CardGroup cols={3}>
-  <Card title="High Performance" icon="gauge" href="/advanced/architecture">
+  <Card title="High Performance" icon="gauge-high" href="/advanced/architecture">
     Redis-backed hot state for < 50ms context retrieval.
   </Card>
-  <Card title="Framework Agnostic" icon="square-code" href="/sdks/python">
-    Works with LangChain, CrewAI, PydanticAI, or Raw SDKs.
+  <Card title="Framework Agnostic" icon="puzzle-piece" href="/sdks/python">
+    Works with any LLM and any orchestrator.
   </Card>
-  <Card title="Open Standards" icon="microchip" href="/api-reference/introduction">
-    REST-first API with full OpenAPI/Swagger support.
+  <Card title="Open Standards" icon="bolt" href="/api-reference/introduction">
+    Full OpenAPI support for easy integration.
   </Card>
 </CardGroup>
 

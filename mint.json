@@ -6,10 +6,10 @@
     },
     "favicon": "/favicon.svg",
     "colors": {
-        "primary": "#2563EB",
-        "light": "#2563EB",
-        "dark": "#2563EB",
-        "anchors": "#60A5FA"
+        "primary": "#0EA5E9",
+        "light": "#38BDF8",
+        "dark": "#020617",
+        "anchors": "#0EA5E9"
     },
     "topbarLinks": [
         {
@@ -17,12 +17,12 @@
             "url": "https://app.statebase.org"
         },
         {
-            "name": "Website",
-            "url": "https://statebase.org"
+            "name": "API Status",
+            "url": "https://status.statebase.org"
         },
         {
-            "name": "Support",
-            "url": "mailto:support@statebase.org"
+            "name": "Community",
+            "url": "https://discord.gg/statebase"
         }
     ],
     "topbarCtaButton": {
@@ -41,50 +41,32 @@
     ],
     "navigation": [
         {
-            "group": "Getting started",
+            "group": "Introduction",
             "pages": [
                 "introduction",
-                "quickstart",
-                "quickstart-memory"
+                "quickstart"
             ]
         },
         {
-            "group": "Core Concepts",
+            "group": "Core Infrastructure",
             "pages": [
                 "concepts/sessions",
                 "concepts/memory",
-                "concepts/memory-scopes",
-                "concepts/snapshots"
+                "concepts/memory-scopes"
             ]
         },
         {
-            "group": "Guides",
+            "group": "SDKs",
             "pages": [
+                "sdks/python",
+                "sdks/typescript"
+            ]
+        },
+        {
+            "group": "Patterns & Guides",
+            "pages": [
+                "advanced/patterns",
                 "guides/agentic-rag"
-            ]
-        },
-        {
-            "group": "Cookbook",
-            "pages": [
-                "cookbook/langchain",
-                "cookbook/vercel-ai-sdk",
-                "cookbook/telegram-bot"
-            ]
-        },
-        {
-            "group": "Integrations",
-            "pages": [
-                "integrations/openai",
-                "integrations/anthropic",
-                "integrations/postgres"
-            ]
-        },
-        {
-            "group": "Tutorials",
-            "pages": [
-                "tutorials/mcp-server",
-                "tutorials/chrome-extension",
-                "tutorials/n8n-integration"
             ]
         },
         {
@@ -98,10 +80,13 @@
             ]
         },
         {
-            "group": "Migration Guides",
+            "group": "Ecosystem",
             "pages": [
-                "migration/mem0",
-                "migration/langchain"
+                "integrations/openai",
+                "integrations/anthropic",
+                "cookbook/langchain",
+                "cookbook/vercel-ai-sdk",
+                "tutorials/mcp-server"
             ]
         },
         {
@@ -111,16 +96,14 @@
             ]
         },
         {
-            "group": "Advanced Usage",
+            "group": "Advanced",
             "pages": [
-                "advanced/context-arithmetic",
-                "advanced/patterns",
                 "advanced/architecture",
-                "advanced/errors"
+                "advanced/context-arithmetic"
             ]
         },
         {
-            "group": "Changelog",
+            "group": "Change Log",
             "pages": [
                 "changelog"
             ]

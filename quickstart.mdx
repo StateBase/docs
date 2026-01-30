@@ -7,73 +7,42 @@ description: 'Go from stateless to persistent in under 2 minutes.'
 **Prerequisite**: Get your API Key from the [StateBase Dashboard](https://app.statebase.org).
 </Info>
 
-## 1. Installation
+## Get Started in 3 Steps
 
-Install the StateBase SDK. It is lightweight, async-first, and has zero heavy machine-learning dependencies.
-
-<CodeGroup>
-```bash Python
-pip install statebase
-```
-
-```bash TypeScript
-npm install @statebase/node
-```
-</CodeGroup>
-
-## 2. Your First Persistent Agent
-
-In this example, we'll build a simple chat loop using **Gemini 2.0-Flash**. StateBase will automatically handle context retrieval and state updates to ensure the agent remembers the user across restarts.
-
-```python
-import os
-from statebase import StateBase
-from google import genai
-from google.genai import types
-
-# 1. Initialize Clients
-sb = StateBase(api_key="sb_live_...")
-gemini = genai.Client(api_key="GEMINI_API_KEY")
-
-# 2. Start (or Resume) a Session
-# StateBase Resolve ownership automatically via your API Key
-session = sb.sessions.create(
-    agent_id="support-agent-v1",
-    initial_state={"status": "onboarding", "interaction_count": 0}
-)
-
-def chat():
-    user_input = input("You: ")
+<Steps>
+  <Step title="Installation">
+    Install the StateBase SDK. It is lightweight, async-first, and has zero heavy machine-learning dependencies.
+    ```bash
+    pip install statebase
+    ```
+  </Step>
+  <Step title="Initialize Session">
+    Connect to your agent's persistent state. StateBase resolves ownership automatically via your API Key.
+    ```python
+    from statebase import StateBase
+    sb = StateBase(api_key="sb_live_...")
     
-    # 3. RETRIEVE: Fetch consolidated context (State + Relevant Memories + History)
-    context = sb.sessions.get_context(
-        session_id=session.id, 
-        query=user_input,
-        memory_limit=5
+    session = sb.sessions.create(
+        agent_id="support-bot-v1",
+        initial_state={"status": "onboarding"}
     )
+    ```
+  </Step>
+  <Step title="Retrieve & Persist">
+    Fetch consolidated context (State + Memories) and save interactions.
+    ```python
+    # Fetch context
+    context = sb.sessions.get_context(session_id=session.id, query="Hello!")
     
-    # 4. THINK: Feed the context directly into the System Prompt
-    response = gemini.models.generate_content(
-        model="gemini-2.0-flash",
-        config=types.GenerateContentConfig(
-            system_instruction=f"Current Agent State: {context['state']}\nRelevant Memories: {context['memories']}"
-        ),
-        contents=user_input
-    )
-    
-    ai_output = response.text
-    print(f"AI: {ai_output}")
-    
-    # 5. PERSIST: Save the interaction for auditability and memory
+    # Save interaction
     sb.sessions.add_turn(
         session_id=session.id,
-        input=user_input,
-        output=ai_output
+        input="Hello!",
+        output="Hi! I remember you."
     )
-
-if __name__ == "__main__":
-    chat()
-```
+    ```
+  </Step>
+</Steps>
 
 ## 3. Verify on the Dashboard
 
