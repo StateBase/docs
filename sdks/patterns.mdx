@@ -1,0 +1,28 @@
+---
+title: "SDK Design Patterns"
+description: "How to structure your code for maximum reliability."
+---
+
+The StateBase SDK is designed to be injected into your existing agent loop. Here are the three most common ways to integrate.
+
+## 1. The Wrapper (Easiest)
+Wrap your entire LLM call in a helper function that automatically handles context and turn logging.
+
+```python
+def ask_agent(session_id, user_query):
+    # 1. Get context
+    context = sb.sessions.get_context(session_id, query=user_query)
+    
+    # 2. Call LLM
+    answer = call_llm(context, user_query)
+    
+    # 3. Log turn
+    sb.sessions.add_turn(session_id, input=user_query, output=answer)
+    return answer
+```
+
+## 2. The Middleware (Recommended)
+Use a decorator or middleware to intercept inputs and outputs. This keeps your core "Agent Brain" code clean of infrastructure logic.
+
+## 3. The Callback (Enterprise)
+For complex agents like LangGraph or CrewAI, use callbacks to sync state after every node execution. This provides granular "Replayability" for every internal step of the agent.

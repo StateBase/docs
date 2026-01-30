@@ -1,6 +1,6 @@
 ---
 title: Welcome to StateBase
-description: Reliability layer for production AI agents.
+description: Ship AI agents with confidence.
 mode: "wide"
 ---
 
@@ -15,49 +15,46 @@ mode: "wide"
   alt="StateBase - Ship with confidence"
 />
 
-## Ship AI Agents with Confidence
+## Imagine your AI had a memory that actually worked.
 
-StateBase is the **reliability layer** for production-grade AI agents. We provide the persistence, memory, and auditability required to transform ephemeral LLM calls into predictable, mission-critical software.
+Most AI agents today are like goldfish. They are brilliant for a single turn, but they forget who the user is, what happened five minutes ago, and why they were doing a task in the first place.
 
-<CardGroup cols={2}>
-  <Card title="Quickstart" icon="bolt" href="/quickstart" color="#2563EB">
-    Build your first stateful agent in **2 minutes**.
-  </Card>
-  <Card title="Core Infrastructure" icon="sitemap" href="/concepts/sessions" color="#2563EB">
-    Understand Sessions, State, and Semantic Memory.
-  </Card>
-</CardGroup>
-
-## The Engineering of State
-
-Modern AI agents fail not because they aren't smart, but because they are **stateless**. StateBase replaces brittle prompt engineering with deterministic **State Engineering**.
-
-<CardGroup cols={2}>
-  <Card title="Logic Consistency" icon="microchip">
-    Deep merge state logic ensures your agent never loses its place in a complex workflow.
-  </Card>
-  <Card title="Long-term Knowledge" icon="brain">
-    Semantic memory storage allows agents to recall user preferences across months of inactivity.
-  </Card>
-  <Card title="Observability" icon="eye">
-    Decision traces provide every internal monologue and state change for perfect auditability.
-  </Card>
-  <Card title="Reliability" icon="rotate-left">
-    Instant rollbacks to any previous state version to recover from model hallucinations.
-  </Card>
-</CardGroup>
-
-## Built for Scale
+**StateBase is the reliability layer for these agents.** We give your AI a persistent brain, a detailed history, and the ability to "rewind" time when things go wrong.
 
 <CardGroup cols={3}>
-  <Card title="High Performance" icon="gauge-high" href="/advanced/architecture">
-    Redis-backed hot state for < 50ms context retrieval.
+  <Card title="Start Here" icon="rocket" href="/quickstart">
+    Go from stateless to production-ready in **2 minutes**.
   </Card>
-  <Card title="Framework Agnostic" icon="puzzle-piece" href="/sdks/python">
-    Works with any LLM and any orchestrator.
+  <Card title="See Demos" icon="play" href="/demos/hallucination-recovery">
+    Watch how we save agents from infinite loops.
   </Card>
-  <Card title="Deep Integration" icon="bolt" href="/api-reference/introduction">
-    Full OpenAPI support for easy, type-safe integration.
+  <Card title="Production" icon="shield-check" href="/playbook/when-to-checkpoint">
+    How founders scale agents with 99.9% reliability.
+  </Card>
+</CardGroup>
+
+## Why Reliability Matters
+
+When an agent fails in production—entering a loop or hallucinating—it doesn't just lose a user. It costs you money in tokens and destroys trust in your product.
+
+We replace brittle "prompt engineering" with **State Engineering**.
+
+### What StateBase handles for you:
+- **Consistency**: Your agent always knows its "current status."
+- **Memory**: It recalls user preferences from months ago, not just the last few messages.
+- **Auditability**: You can see every internal thought the agent had before it answered.
+- **Safety**: Revert your agent to a "safe" checkpoint if it goes off-rails.
+
+## Built for Engineering Teams
+
+Whether you are using OpenAI, Anthropic, or local models, StateBase acts as the unified persistence layer for your entire agent fleet.
+
+<CardGroup cols={2}>
+  <Card title="Minimal SDK" icon="box">
+    Pydantic-native, async-ready, and lightweight.
+  </Card>
+  <Card title="Open Standards" icon="bolt">
+    REST-first architecture with full OpenAPI support.
   </Card>
 </CardGroup>
 

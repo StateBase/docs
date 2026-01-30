@@ -1,0 +1,33 @@
+---
+title: "What is State? (vs. Memory)"
+description: "Understanding the difference between long-term facts and active logic."
+---
+
+One of the most common mistakes in agent design is treating "State" and "Memory" as the same thing. In StateBase, they serve two distinct purposes.
+
+## 1. State (Active Logic)
+**Think of this as the "RAM" of your agent.**
+
+State is a structured JSON object representing the **current condition** of the agent. It is what the agent uses to make its *immediate next decision*.
+
+- **Structure**: Strongly typed schemas (e.g., `{"status": "onboarding", "step": 2}`).
+- **Behavior**: Updated frequently, often every turn.
+- **Goal**: Deterministic logic flow.
+- **Example**: A shopping assistant's current `cart_items` list.
+
+## 2. Memory (Long-term Facts)
+**Think of this as the "Hard Drive" of your agent.**
+
+Memory consists of unstructured or semi-structured facts extracted from previous interactions. It is retrieved semantically when relevant.
+
+- **Structure**: Natural language or key-value pairs (`"User is allergic to peanuts"`).
+- **Behavior**: Static until reinforced or corrected.
+- **Goal**: Personality and long-term personalization.
+- **Example**: The fact that a user lives in Seattle and prefers python.
+
+## The Synthesis: Context
+When you call `sb.sessions.get_context()`, StateBase merges these two:
+1. It retrieves the **Current State** (Cart items: 3).
+2. It fetches **Relevant Memories** (User usually buys gluten-free).
+
+**The Result**: A perfectly primed prompt that is both logically accurate and personally relevant.

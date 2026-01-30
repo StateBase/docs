@@ -1,0 +1,70 @@
+---
+title: "Copy-Paste Agent Example"
+description: "A complete, production-ready persistent agent in one file."
+---
+
+This script demonstrates the "Senior Agent" pattern. It extracts its own state and memory using XML tags and uses StateBase to persist them across turns.
+
+```python
+import os
+import re
+import json
+from statebase import StateBase
+from google import genai
+from google.genai import types
+
+# 1. Setup Clients
+sb = StateBase(api_key=os.getenv("STATEBASE_KEY"))
+gemini = genai.Client(api_key=os.getenv("GEMINI_KEY"))
+
+# 2. Initialize Persistent Session
+session = sb.sessions.create(
+    agent_id="senior-support-v1",
+    initial_state={"status": "ready", "user_name": "Guest"}
+)
+
+def process_interaction(user_input):
+    # 3. Get Context (State + Memories + History)
+    context = sb.sessions.get_context(session_id=session.id, query=user_input)
+    
+    # 4. Prompt with State-Awareness
+    prompt = f"""
+    Current State: {context['state']}
+    Relevant Memories: {context['memories']}
+    
+    If you learn something new, use <memory>...</memory>.
+    To update state, use <state_update>{{"key": "value"}}</state_update>.
+    """
+    
+    response = gemini.models.generate_content(
+        model="gemini-2.0-flash",
+        config=types.GenerateContentConfig(system_instruction=prompt),
+        contents=user_input
+    )
+    
+    raw_output = response.text
+    
+    # 5. Extract and Persist (The StateBase Magic)
+    # Memory extraction
+    mem_match = re.search(r"<memory>(.*?)</memory>", raw_output)
+    if mem_match:
+        sb.memory.add(content=mem_match.group(1), session_id=session.id)
+        
+    # State extraction
+    state_match = re.search(r"<state_update>(.*?)</state_update>", raw_output)
+    if state_match:
+        new_state = json.loads(state_match.group(1))
+        sb.sessions.update_state(session_id=session.id, state=new_state)
+        
+    # 6. Log Turn for Dashboard Trace
+    sb.sessions.add_turn(session_id=session.id, input=user_input, output=raw_output)
+    
+    return re.sub(r"<(memory|state_update)>.*?</\1>", "", raw_output).strip()
+
+# Run the loop
+if __name__ == "__main__":
+    print(process_interaction("My name is Alex and I love python."))
+```
+
+## Key Engineering Takeaway
+By using this pattern, your application code remains **fixed**. You can change the agent's behavior, personality, or state schema entirely by just changing the system prompt—StateBase handles the heavy lifting of storage and retrieval automatically.

@@ -1,0 +1,31 @@
+---
+title: "When to use StateBase"
+description: "Identifying the anti-patterns of stateless agents."
+---
+
+Reliability in AI agents is not about making the model smarter; it's about making the system more resilient. You need StateBase when your agent moves beyond simple Q&A into complex, multi-turn workflows.
+
+## The Signs You Need StateBase
+
+### 1. The "Memory Leak" Prompt
+**Anti-pattern**: You are manually appending history to a string that grows until it hits the context limit.
+**The Fix**: Use **StateBase Sessions**. We manage the sliding window and semantic pruning so you only ever feed the model relevant context.
+
+### 2. The "Goldfish" Effect
+**Anti-pattern**: Your agent forgets the user's name or a key constraint halfway through a task.
+**The Fix**: **Durable State**. Define specific variables that must persist (e.g., `user_authenticated: true`) regardless of chat history.
+
+### 3. The "Infinite Loop" Hallucination
+**Anti-pattern**: An agent calls the same tool 10 times with slightly different parameters, wasting $1.00 in tokens.
+**The Fix**: **Decision Traces & Rollbacks**. Detect a loop and instantly revert the agent to its last "sane" state.
+
+### 4. The "Black Box" Problem
+**Anti-pattern**: A customer says "the agent broke," and you have no way to reproduce exactly what happened.
+**The Fix**: **Replayability**. Every turn is a checkpoint. You can replay any session step-by-step in your local terminal.
+
+## When NOT to use StateBase
+- Single-turn completions (e.g., translation, summarization).
+- Simple "search-and-answer" bots with no ongoing state.
+- Prototypes where reliability is secondary to speed.
+
+StateBase is for **Production Agents** where failure has a cost.

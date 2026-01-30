@@ -1,0 +1,30 @@
+---
+title: "When to Checkpoint"
+description: "Optimizing for reliability vs. token costs."
+---
+
+Checkpointing is the act of committing your agent's state and interaction history to StateBase. Doing it too often is noisy; doing it too rarely is dangerous.
+
+## The "Critical Path" Principle
+You should create a checkpoint (add a turn or update state) whenever the agent makes a **commitment**.
+
+### ✅ Do Checkpoint:
+- **After Tool Execution**: If the agent successfully calls a database or API, save that result immediately.
+- **Before User Confirmation**: Save the proposed action state so if the user says "No," you can revert to the decision point.
+- **After Memory Extraction**: When the agent learns something permanent, commit it to long-term memory.
+- **Every X Turns**: For long conversations, a "heartbeat" checkpoint every 5 turns ensures a crash doesn't lose everything.
+
+### ❌ Don't Checkpoint:
+- **Interim Reasoning**: If the agent is "thinking" internally across multiple LLM calls for a single task, only save the final outcome.
+- **Greeting/Small Talk**: Don't waste storage on "Hello" unless it contains identity data.
+
+## Cost vs. Safety Tradeoffs
+Every checkpoint in StateBase is optimized for millisecond latency, but it does incur a storage record.
+
+| Frequency | Target Use Case | Founder Takeaway |
+| :--- | :--- | :--- |
+| **Per-Turn** | Financial/Health Agents | Infinite safety, slightly higher latency. |
+| **Per-Milestone** | Creative/Writing Agents | Cheaper, but rollbacks are less granular. |
+| **Manual** | Developer Experiments | Complete control, higher logic complexity. |
+
+**Recommendation**: Start with **Per-Turn** checkpointing. You can always optimize later, but you can't restore what was never saved.

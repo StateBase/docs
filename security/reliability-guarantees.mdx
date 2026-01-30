@@ -1,0 +1,25 @@
+---
+title: "Reliability Guarantees"
+description: "What happens when things go wrong?"
+---
+
+Founders choose StateBase because they need a system that doesn't fail when their agent gets popular.
+
+## 1. High Availability (The "What if" factor)
+StateBase uses a distributed architecture across multiple GCP regions.
+- **Redis Layer**: Sub-10ms state retrieval.
+- **Postgres Layer**: Guaranteed durability for long-term history.
+- **Failover**: If our main API is unreachable, our SDKs are designed with **Graceful Degradation**.
+
+## 2. Graceful Degradation
+If the StateBase API times out, the SDK will:
+1. Log a warning to your console.
+2. Return an empty context/memory object.
+3. Allow the LLM call to proceed (Stateless mode).
+**Result**: Your agent keeps talking, but momentarily loses its "memory" until the connection is restored.
+
+## 3. Data Isolation
+Every API Key operates in a strictly isolated environment. Sessions, memories, and traces are nunca shared across tenants.
+
+## 4. Disaster Recovery
+We perform backups every 4 hours. In the event of a total system failure, we can restore your agent's state to within the last few minutes of their interaction history.

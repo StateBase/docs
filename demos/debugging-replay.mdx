@@ -1,0 +1,37 @@
+---
+title: "Debugging with Replay"
+description: "Reproducing production failures in 1:1 fidelity."
+---
+
+"It worked on my machine" is the death of AI agent development. LLMs behave differently at 3 AM in production than they do on your local terminal. 
+
+StateBase provides **Decision Replay** to solve this.
+
+## The Workflow
+
+### 1. Identify the Failure
+You see a failed session in the **StateBase Dashboard**. The agent gave a weird answer at Turn #14.
+
+### 2. Export the Session
+Fetch the session data using the SDK or CLI.
+```bash
+sb export sess_abc123 --turn 14 > failure_turn.json
+```
+
+### 3. Replay Locally
+Using the exported state, you can re-run Turn #14 locally against your latest code or a different model (e.g., GPT-4o instead of Gemini) to see if it fixes the issue.
+
+```python
+# Initialize session with the EXACT state from the failure
+session = sb.sessions.create(
+    initial_state=imported_state_from_turn_13
+)
+
+# Run the turn
+result = my_agent.process(user_input_from_turn_14)
+```
+
+## Why this matters
+- **Exact Reproducibility**: You are not guessing what the state was. You have the exact snapshot of the agent's "brain" at the millisecond of failure.
+- **Regression Testing**: After you fix the prompt, you can replay the last 100 failed sessions against the new code to ensure they now pass.
+- **Confidence**: Ship updates knowing you've actually solved the edge cases.

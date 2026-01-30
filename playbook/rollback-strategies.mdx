@@ -1,0 +1,18 @@
+---
+title: "Rollback Strategies"
+description: "Techniques for recovering from agent drift."
+---
+
+Rollback is not just for errors; it's a strategic tool for agent autonomy.
+
+## 1. Automated Guardrail Rollback
+Integrate a "Guardrail" model (like Llama-Guard or a regex filter). If the output is unsafe, automatically roll back the session state and prompt with a "Correction" instead of showing the failure to the user.
+
+## 2. "Rewind" UI for Users
+Give users a "Undo" button. When clicked, call `sb.sessions.rollback(count=1)`. This is incredibly powerful for creative agents (co-writing, coding) where the user wants to try a different branch.
+
+## 3. Tool-Failure Recovery
+If a tool call returns a 404 or 500, rollback the agent's state to *before* it thought about calling that tool. This prevents the agent from getting stuck trying to "fix" a broken external dependency.
+
+---
+**Founder Insight**: Rollbacks reduce your support burden. An agent that can "self-correct" by rewinding time is an agent that stays in production longer without human intervention.

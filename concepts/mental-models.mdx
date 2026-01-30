@@ -1,0 +1,22 @@
+---
+title: "The StateBase Mental Model"
+description: "How to think like a StateBase developer."
+---
+
+Building with StateBase requires a shift in how you view AI. Most developers view an agent as a **Linear Function**:
+`Input -> LLM -> Output`.
+
+StateBase developers view an agent as a **State Machine**:
+`Current State + Input -> LLM -> Output + New State`.
+
+## 1. The Session as a Ledger
+Stop thinking of chat history as a list of strings. Think of it as a **ledger of transitions**. Every interaction is a change in the agent's internal world. If you have the ledger, you can reproduce the world.
+
+## 2. The Context is a Construction
+Don't pass "Everything" to the LLM. Construct a "Prime Directive" for every turn.
+- Who is the user? (Memory)
+- Where are we? (State)
+- What just happened? (Turns)
+
+## 3. The Model is a Controller
+In the StateBase world, the LLM is the "CPU," but StateBase is the "Bus." The LLM decides what to do, but StateBase ensures it has the instructions and remembers the result.

@@ -1,0 +1,33 @@
+---
+title: "Agent Hallucination Recovery"
+description: "How to detect a drift and revert to a sane state."
+---
+
+AI agents don't always fail loudly. Sometimes they "drift"—entering a state where they hallucinate facts or enter infinite loops. This demo shows how to use StateBase to recover instantly.
+
+## The Scenario
+A customer support agent is helping a user reset their password. The agent accidentally tries to update a `null` field, causing the LLM to get confused and start repeating "I'm sorry, I can't do that" in a loop.
+
+## 1. Detection
+In your application logic, you detect that the last 3 outputs have been nearly identical.
+
+## 2. The Rollback
+Instead of killing the session, you simply roll the session state back to the turn before the error occurred.
+
+```python
+# Detect drift...
+if is_hallucinating(last_turns):
+    # Rollback to 1 turn ago
+    sb.sessions.rollback(session_id=session.id, turn_count=1)
+    
+    # Retry with a 'correction' prompt
+    retry_prompt = "You encountered an error. Please try a different approach."
+```
+
+## Why this matters
+- **Save Revenue**: You don't lose the user's progress. They don't have to start the 10-minute onboarding over again.
+- **Traceability**: In the Dashboard, you'll see a "Rollback Event," allowing your developers to analyze the exact turn that caused the drift.
+- **User Experience**: The user sees a slight delay followed by a successful answer, rather than a "System Error" message.
+
+## See it in Action
+*Coming soon: Interactive Dashboard Walkthrough GIF*

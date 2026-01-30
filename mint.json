@@ -33,32 +33,70 @@
     ],
     "navigation": [
         {
-            "group": "Introduction",
+            "group": "Start Here",
             "pages": [
                 "introduction",
-                "quickstart"
+                "start-here/when-to-use",
+                "quickstart",
+                "start-here/copy-paste-example"
             ]
         },
         {
-            "group": "Core Infrastructure",
+            "group": "Demos",
             "pages": [
-                "concepts/sessions",
-                "concepts/memory",
-                "concepts/memory-scopes"
+                "demos/hallucination-recovery",
+                "demos/debugging-replay",
+                "demos/multi-tool-recovery"
+            ]
+        },
+        {
+            "group": "Core Concepts",
+            "pages": [
+                "concepts/mental-models",
+                "concepts/what-is-state",
+                "concepts/sessions-turns-memory",
+                "concepts/checkpoints-rollbacks",
+                "concepts/replay-audit",
+                "concepts/failure-modes"
             ]
         },
         {
             "group": "SDKs",
             "pages": [
                 "sdks/python",
-                "sdks/typescript"
+                "sdks/typescript",
+                "sdks/patterns",
+                "sdks/error-handling"
             ]
         },
         {
-            "group": "Patterns & Guides",
+            "group": "Agent Patterns",
             "pages": [
-                "advanced/patterns",
-                "guides/agentic-rag"
+                "patterns/tool-calling",
+                "patterns/long-running",
+                "patterns/rag-agents",
+                "patterns/multi-agent",
+                "patterns/human-in-the-loop"
+            ]
+        },
+        {
+            "group": "Integrations",
+            "pages": [
+                "integrations/openai",
+                "integrations/anthropic",
+                "integrations/langchain",
+                "integrations/langgraph",
+                "integrations/vercel-ai-sdk",
+                "integrations/mcp"
+            ]
+        },
+        {
+            "group": "Production Playbook",
+            "pages": [
+                "playbook/when-to-checkpoint",
+                "playbook/rollback-strategies",
+                "playbook/cost-vs-safety",
+                "playbook/incident-recovery"
             ]
         },
         {
@@ -72,24 +110,23 @@
             ]
         },
         {
-            "group": "Ecosystem",
+            "group": "Examples & Templates",
             "pages": [
-                "integrations/openai",
-                "integrations/anthropic",
-                "cookbook/langchain",
-                "cookbook/vercel-ai-sdk",
-                "tutorials/mcp-server"
+                "templates/starter-agent",
+                "templates/production-agent",
+                "templates/failure-injection"
             ]
         },
         {
-            "group": "Advanced",
+            "group": "Security & Reliability",
             "pages": [
-                "advanced/architecture",
-                "advanced/context-arithmetic"
+                "security/data-handling",
+                "security/isolation-model",
+                "security/reliability-guarantees"
             ]
         },
         {
-            "group": "Change Log",
+            "group": "Changelog",
             "pages": [
                 "changelog"
             ]
