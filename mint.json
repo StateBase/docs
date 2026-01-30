@@ -6,10 +6,10 @@
     },
     "favicon": "/favicon.svg",
     "colors": {
-        "primary": "#0EA5E9",
+        "primary": "#2563EB",
         "light": "#38BDF8",
-        "dark": "#020617",
-        "anchors": "#0EA5E9"
+        "dark": "#050505",
+        "anchors": "#2563EB"
     },
     "topbarLinks": [
         {
@@ -19,10 +19,6 @@
         {
             "name": "API Status",
             "url": "https://status.statebase.org"
-        },
-        {
-            "name": "Community",
-            "url": "https://discord.gg/statebase"
         }
     ],
     "topbarCtaButton": {
@@ -87,12 +83,6 @@
                 "cookbook/langchain",
                 "cookbook/vercel-ai-sdk",
                 "tutorials/mcp-server"
-            ]
-        },
-        {
-            "group": "Enterprise",
-            "pages": [
-                "enterprise/self-hosting"
             ]
         },
         {

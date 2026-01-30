@@ -1,64 +1,48 @@
 ---
 title: 'Quickstart'
-description: 'Go from stateless to persistent in under 2 minutes.'
+description: 'Ship with confidence in under 2 minutes.'
 ---
 
 <Info>
-**Prerequisite**: Get your API Key from the [StateBase Dashboard](https://app.statebase.org).
+**Initial Setup**: Obtain your API Key from the [StateBase Dashboard](https://app.statebase.org).
 </Info>
 
-## Get Started in 3 Steps
+## Build in 3 Steps
 
 <Steps>
   <Step title="Installation">
-    Install the StateBase SDK. It is lightweight, async-first, and has zero heavy machine-learning dependencies.
+    Install the core SDK. It is lightweight, async-first, and engineering-focused.
     ```bash
     pip install statebase
     ```
   </Step>
-  <Step title="Initialize Session">
-    Connect to your agent's persistent state. StateBase resolves ownership automatically via your API Key.
+  <Step title="Initialize Persistence">
+    Connect your agent to a persistent session. StateBase resolves ownership via your API Key.
     ```python
     from statebase import StateBase
     sb = StateBase(api_key="sb_live_...")
     
     session = sb.sessions.create(
-        agent_id="support-bot-v1",
-        initial_state={"status": "onboarding"}
+        agent_id="production-agent-v1",
+        initial_state={"status": "active"}
     )
     ```
   </Step>
-  <Step title="Retrieve & Persist">
-    Fetch consolidated context (State + Memories) and save interactions.
+  <Step title="Observe & Remember">
+    Fetch consolidated context (State + Memories) and log decisions.
     ```python
-    # Fetch context
-    context = sb.sessions.get_context(session_id=session.id, query="Hello!")
+    # 1. Get context for prompt
+    context = sb.sessions.get_context(session_id=session.id, query="User query")
     
-    # Save interaction
+    # 2. Log decision trace
     sb.sessions.add_turn(
         session_id=session.id,
-        input="Hello!",
-        output="Hi! I remember you."
+        input="User query",
+        output="Agent response"
     )
     ```
   </Step>
 </Steps>
 
-## 3. Verify on the Dashboard
-
-Head over to the [StateBase Dashboard](https://app.statebase.org/dashboard/sessions) to see your session in action. You'll find:
-
-- **Complete Trace**: Real-time log of every turn.
-- **State Diff**: Exactly how the agent's internal state changed.
-- **Memory Bank**: Key facts the agent has extracted and saved for the long term.
-
-## What's next?
-
-<CardGroup cols={2}>
-  <Card title="Concept: Sessions" icon="bolt" href="/concepts/sessions">
-    Understand how sessions act as immutable ledgers for agent logic.
-  </Card>
-  <Card title="The Senior Pattern" icon="brain" href="/advanced/patterns">
-    Implementation of autonomous state updates and memory extraction.
-  </Card>
-</CardGroup>
+## Reliability Dashboard
+Monitor your agent's state, memory, and decision traces in real-time on the [StateBase Dashboard](https://app.statebase.org/dashboard/sessions).
