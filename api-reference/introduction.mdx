@@ -1,24 +1,543 @@
 ---
-title: "API Introduction"
-description: "REST API V1.0"
+title: "API Reference Introduction"
+description: "Complete REST API documentation for StateBase"
 ---
 
-StateBase provides a high-performance RESTful API for managing agent continuity.
+# API Reference
 
-**Base URL**: `https://api.statebase.org`
+Welcome to the StateBase API reference. This documentation covers all REST endpoints for building production-ready AI agents with state management, memory, and complete audit trails.
+
+---
+
+## Base URL
+
+```
+https://api.statebase.org
+```
+
+All API requests must use HTTPS. HTTP requests will be redirected.
+
+---
 
 ## Authentication
 
-Authentication is performed via an API Key. You can provide it in one of two ways:
+StateBase uses **API keys** for authentication. Include your API key in the `X-API-Key` header:
 
-### 1. Bearer Token (Recommended)
-```http
-Authorization: Bearer sb_live_...
+```bash
+curl https://api.statebase.org/v1/sessions \
+  -H "X-API-Key: sb_your_api_key_here"
 ```
 
-### 2. Custom Header
-```http
-X-API-Key: sb_live_...
+### Getting Your API Key
+
+1. Sign up at [app.statebase.org](https://app.statebase.org)
+2. Navigate to **Settings → API Keys**
+3. Click **Create New Key**
+4. Copy and store securely (keys are only shown once)
+
+### API Key Format
+
+```
+sb_<24_character_key>
 ```
 
-All requests must be served over HTTPS.
+**Security**: Never commit API keys to version control. Use environment variables:
+
+```bash
+export STATEBASE_API_KEY="sb_your_key"
+```
+
+---
+
+## SDKs
+
+We provide official SDKs for Python and TypeScript:
+
+<CodeGroup>
+```bash Python
+pip install statebase
+```
+
+```bash TypeScript
+npm install @statebase/node
+```
+</CodeGroup>
+
+### SDK Usage
+
+<CodeGroup>
+```python Python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_your_key")
+
+# Create session
+session = sb.sessions.create(
+    agent_id="my-agent",
+    initial_state={"status": "new"}
+)
+
+# Add turn
+sb.sessions.add_turn(
+    session_id=session.id,
+    input={"type": "text", "content": "Hello"},
+    output={"type": "text", "content": "Hi there!"}
+)
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/node';
+
+const sb = new StateBase({ apiKey: 'sb_your_key' });
+
+// Create session
+const session = await sb.sessions.create({
+  agentId: 'my-agent',
+  initialState: { status: 'new' }
+});
+
+// Add turn
+await sb.sessions.addTurn(session.id, {
+  input: { type: 'text', content: 'Hello' },
+  output: { type: 'text', content: 'Hi there!' }
+});
+```
+</CodeGroup>
+
+---
+
+## Core Concepts
+
+StateBase is built on four core primitives:
+
+### 1. Sessions
+
+**Containers** for agent conversations. Each session has:
+- Unique ID
+- Mutable state (JSON object)
+- TTL (time-to-live)
+- Associated memories and turns
+
+**Use case**: One session per conversation thread.
+
+[→ Sessions API Reference](/api-reference/sessions)
+
+### 2. Turns
+
+**Individual interactions** between user and agent. Each turn captures:
+- User input
+- Agent output
+- Reasoning (why the agent made this decision)
+- State snapshots (before/after)
+
+**Use case**: Log every conversation exchange for debugging and analytics.
+
+[→ Turns API Reference](/api-reference/turns)
+
+### 3. Memory
+
+**Long-term knowledge** that persists across sessions. Memories are:
+- Searchable via semantic similarity
+- Tagged and categorized
+- User-scoped or global
+
+**Use case**: Store user preferences, facts, and policies.
+
+[→ Memory API Reference](/api-reference/memory)
+
+### 4. Traces
+
+**Audit trail** of all operations. Every API call creates a trace with:
+- Action type
+- Actor (who made the change)
+- Timestamp
+- Details (what changed)
+
+**Use case**: Debugging, compliance, and analytics.
+
+[→ Traces API Reference](/api-reference/traces)
+
+---
+
+## Request Format
+
+All `POST`, `PATCH`, and `PUT` requests must use JSON:
+
+```bash
+curl -X POST https://api.statebase.org/v1/sessions \
+  -H "X-API-Key: sb_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "my-agent"}'
+```
+
+---
+
+## Response Format
+
+All responses are JSON with a consistent structure:
+
+### Success Response
+
+```json
+{
+  "object": "session",
+  "id": "sess_abc123",
+  "agent_id": "my-agent",
+  "created_at": "2026-01-31T04:00:00Z",
+  ...
+}
+```
+
+### List Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    { "object": "session", "id": "sess_1", ... },
+    { "object": "session", "id": "sess_2", ... }
+  ],
+  "has_more": false
+}
+```
+
+### Error Response
+
+```json
+{
+  "error": {
+    "code": "session_not_found",
+    "message": "Session sess_abc123 does not exist",
+    "type": "invalid_request_error",
+    "param": "session_id"
+  }
+}
+```
+
+---
+
+## Error Codes
+
+| HTTP Status | Error Code | Description |
+|-------------|------------|-------------|
+| 400 | `invalid_request` | Missing or invalid parameters |
+| 401 | `authentication_failed` | Invalid or missing API key |
+| 403 | `permission_denied` | API key lacks required permissions |
+| 404 | `resource_not_found` | Session, turn, or memory doesn't exist |
+| 413 | `payload_too_large` | Request body exceeds size limit |
+| 429 | `rate_limit_exceeded` | Too many requests (see rate limits below) |
+| 500 | `internal_error` | Server error (contact support if persists) |
+| 503 | `service_unavailable` | Temporary outage (retry with backoff) |
+
+---
+
+## Rate Limits
+
+Rate limits are applied per API key:
+
+| Tier | Requests/Minute | Burst Limit |
+|------|-----------------|-------------|
+| **Free** | 100 | 200 |
+| **Pro** | 1,000 | 2,000 |
+| **Enterprise** | Custom | Custom |
+
+### Rate Limit Headers
+
+Every response includes rate limit information:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1706745600
+```
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Max requests per minute |
+| `X-RateLimit-Remaining` | Remaining requests in current window |
+| `X-RateLimit-Reset` | Unix timestamp when limit resets |
+
+### Handling Rate Limits
+
+When you exceed the rate limit, you'll receive a `429` response:
+
+```json
+{
+  "error": {
+    "code": "rate_limit_exceeded",
+    "message": "Rate limit exceeded. Retry after 30 seconds.",
+    "type": "rate_limit_error",
+    "retry_after": 30
+  }
+}
+```
+
+**Best practice**: Implement exponential backoff:
+
+```python
+import time
+
+def call_api_with_retry(func, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except RateLimitError as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # 1s, 2s, 4s
+                time.sleep(wait_time)
+            else:
+                raise
+```
+
+---
+
+## Pagination
+
+List endpoints support cursor-based pagination:
+
+```bash
+# First page
+curl "https://api.statebase.org/v1/sessions?limit=20" \
+  -H "X-API-Key: sb_your_key"
+
+# Next page (use last ID from previous response)
+curl "https://api.statebase.org/v1/sessions?limit=20&starting_after=sess_xyz789" \
+  -H "X-API-Key: sb_your_key"
+```
+
+### Pagination Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | integer | Max items per page (default: 20, max: 100) |
+| `starting_after` | string | ID to start after (for next page) |
+
+### Pagination Response
+
+```json
+{
+  "object": "list",
+  "data": [...],
+  "has_more": true,
+  "first_id": "sess_abc123",
+  "last_id": "sess_xyz789"
+}
+```
+
+---
+
+## Idempotency
+
+To safely retry requests without duplicating operations, use idempotency keys:
+
+```bash
+curl -X POST https://api.statebase.org/v1/sessions \
+  -H "X-API-Key: sb_your_key" \
+  -H "Idempotency-Key: unique-request-id-123" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "my-agent"}'
+```
+
+**How it works**:
+- If request succeeds, response is cached for 24 hours
+- If you retry with same key, cached response is returned
+- No duplicate sessions are created
+
+**Supported endpoints**: All `POST` and `PATCH` endpoints
+
+---
+
+## Webhooks
+
+Subscribe to real-time events:
+
+```json
+{
+  "url": "https://your-app.com/webhooks/statebase",
+  "events": [
+    "session.created",
+    "session.updated",
+    "turn.added",
+    "memory.created"
+  ]
+}
+```
+
+Configure in [Dashboard → Webhooks](https://app.statebase.org/webhooks).
+
+### Webhook Payload
+
+```json
+{
+  "id": "evt_abc123",
+  "type": "session.created",
+  "created_at": "2026-01-31T04:00:00Z",
+  "data": {
+    "object": "session",
+    "id": "sess_xyz789",
+    ...
+  }
+}
+```
+
+### Verifying Webhooks
+
+Verify webhook signatures to ensure they're from StateBase:
+
+```python
+import hmac
+import hashlib
+
+def verify_webhook(payload, signature, secret):
+    expected = hmac.new(
+        secret.encode(),
+        payload.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    
+    return hmac.compare_digest(expected, signature)
+```
+
+---
+
+## Versioning
+
+The API is versioned via the URL path:
+
+```
+https://api.statebase.org/v1/sessions
+                          ^^
+                          version
+```
+
+**Current version**: `v1`
+
+**Breaking changes**: We'll release new versions (v2, v3) for breaking changes. Old versions are supported for 12 months after deprecation.
+
+---
+
+## Data Residency
+
+Choose where your data is stored:
+
+| Region | Endpoint | Location |
+|--------|----------|----------|
+| **US** | `api.statebase.org` | United States (default) |
+| **EU** | `eu.api.statebase.org` | European Union |
+| **APAC** | `apac.api.statebase.org` | Asia-Pacific |
+
+Configure in [Dashboard → Settings](https://app.statebase.org/settings).
+
+---
+
+## Support
+
+- **Documentation**: [docs.statebase.org](https://docs.statebase.org)
+- **Discord**: [discord.gg/statebase](https://discord.gg/statebase)
+- **Email**: support@statebase.org
+- **Status**: [status.statebase.org](https://status.statebase.org)
+
+---
+
+## Quick Start
+
+Here's a complete example to get you started:
+
+<CodeGroup>
+```python Python
+from statebase import StateBase
+
+# Initialize
+sb = StateBase(api_key="sb_your_key")
+
+# Create session
+session = sb.sessions.create(
+    agent_id="quickstart-agent",
+    initial_state={"step": "greeting"}
+)
+
+# Add memory
+sb.memory.add(
+    session_id=session.id,
+    content="User prefers concise responses",
+    type="preference"
+)
+
+# Get context (for agent prompt)
+context = sb.sessions.get_context(
+    session_id=session.id,
+    query="user preferences"
+)
+
+# Log conversation turn
+sb.sessions.add_turn(
+    session_id=session.id,
+    input={"type": "text", "content": "Hello"},
+    output={"type": "text", "content": "Hi! How can I help?"},
+    reasoning="Greeting user"
+)
+
+# Update state
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"step": "active"},
+    reasoning="User engaged"
+)
+
+print(f"Session created: {session.id}")
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/node';
+
+// Initialize
+const sb = new StateBase({ apiKey: 'sb_your_key' });
+
+// Create session
+const session = await sb.sessions.create({
+  agentId: 'quickstart-agent',
+  initialState: { step: 'greeting' }
+});
+
+// Add memory
+await sb.memory.add({
+  sessionId: session.id,
+  content: 'User prefers concise responses',
+  type: 'preference'
+});
+
+// Get context
+const context = await sb.sessions.getContext(session.id, {
+  query: 'user preferences'
+});
+
+// Log turn
+await sb.sessions.addTurn(session.id, {
+  input: { type: 'text', content: 'Hello' },
+  output: { type: 'text', content: 'Hi! How can I help?' },
+  reasoning: 'Greeting user'
+});
+
+// Update state
+await sb.sessions.updateState(session.id, {
+  state: { step: 'active' },
+  reasoning: 'User engaged'
+});
+
+console.log(`Session created: ${session.id}`);
+```
+</CodeGroup>
+
+---
+
+## Next Steps
+
+- **[Sessions API](/api-reference/sessions)**: Create and manage sessions
+- **[Turns API](/api-reference/turns)**: Log conversations
+- **[Memory API](/api-reference/memory)**: Store long-term knowledge
+- **[Traces API](/api-reference/traces)**: Audit and debugging
+- **[Quickstart Guide](/quickstart)**: Build your first agent
+
+---
+
+**Ready to build?** Start with the [Quickstart Guide](/quickstart) or explore the [Patterns](/patterns/tool-calling) section for production-ready examples.

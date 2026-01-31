@@ -1,146 +1,605 @@
 ---
 title: "Sessions API"
-description: "Manage agent sessions directly via REST"
+description: "Complete REST API reference for managing agent sessions"
+api: "POST https://api.statebase.org/v1/sessions"
 ---
 
-<Note>
-Sessions are the top-level containers for all agent interactions. They persist state, memory, and history.
-</Note>
+# Sessions API
+
+Sessions are the **top-level containers** for all agent interactions. They persist state, memory, and conversation history.
+
+---
+
+## Authentication
+
+All API requests require authentication via API key:
+
+```bash
+curl https://api.statebase.org/v1/sessions \
+  -H "X-API-Key: sb_your_api_key_here"
+```
+
+**Header**: `X-API-Key: sb_<your_key>`  
+**Get your API key**: [Dashboard → API Keys](https://app.statebase.org/api-keys)
+
+---
 
 ## Create Session
 
-<ParamField body="agent_id" type="string" required>
-  Unique identifier for the agent (e.g., `finance_bot_v1`).
-</ParamField>
+`POST /v1/sessions`
 
-<ParamField body="metadata" type="object">
-  Arbitrary JSON key-value pairs for application context (e.g., user tier, region).
-</ParamField>
+Creates a new session for an agent. Sessions are isolated containers that store state, memory, and conversation history.
 
-<ParamField body="initial_state" type="object">
-  The starting state payload for the session.
-</ParamField>
+### Request Body
 
-<ParamField body="ttl_seconds" type="integer" default="86400">
-  Time-to-live in seconds. Default is 24 hours. Max is 30 days.
-</ParamField>
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agent_id` | string | ✅ Yes | Unique identifier for your agent (e.g., `customer-support-v1`) |
+| `user_id` | string | No | User identifier for multi-tenant isolation |
+| `initial_state` | object | No | Starting state (default: `{}`) |
+| `metadata` | object | No | Custom metadata (e.g., `{"env": "prod", "version": "1.2"}`) |
+| `ttl_seconds` | integer | No | Session lifetime in seconds (default: 86400 = 24h, max: 2592000 = 30 days) |
 
-<ResponseField name="id" type="string">
-  The unique session ID (e.g., `sess_01H...`).
-</ResponseField>
+### Response
 
-<ResponseField name="ttl_expires_at" type="string">
-  ISO 8601 timestamp when the session will auto-delete.
-</ResponseField>
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique session ID (format: `sess_<12_chars>`) |
+| `agent_id` | string | Agent identifier |
+| `user_id` | string | User identifier (if provided) |
+| `created_at` | string | ISO 8601 timestamp |
+| `updated_at` | string | ISO 8601 timestamp |
+| `state` | object | Current session state |
+| `metadata` | object | Custom metadata |
+| `memory_count` | integer | Number of memories attached to this session |
+| `turn_count` | integer | Number of conversation turns |
+| `ttl_expires_at` | string | ISO 8601 timestamp when session expires |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
 curl -X POST https://api.statebase.org/v1/sessions \
-  -H "Authorization: Bearer <token>" \
+  -H "X-API-Key: sb_your_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_id": "coding_agent",
-    "metadata": { "env": "prod" },
+    "agent_id": "customer-support",
+    "user_id": "user_123",
+    "initial_state": {
+      "status": "new",
+      "priority": "normal"
+    },
+    "metadata": {
+      "channel": "web",
+      "region": "us-west"
+    },
     "ttl_seconds": 3600
   }'
+```
+
+```python Python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_your_key")
+
+session = sb.sessions.create(
+    agent_id="customer-support",
+    user_id="user_123",
+    initial_state={
+        "status": "new",
+        "priority": "normal"
+    },
+    metadata={
+        "channel": "web",
+        "region": "us-west"
+    }
+)
+
+print(session.id)  # sess_a1b2c3d4e5f6
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/node';
+
+const sb = new StateBase({ apiKey: 'sb_your_key' });
+
+const session = await sb.sessions.create({
+  agentId: 'customer-support',
+  userId: 'user_123',
+  initialState: {
+    status: 'new',
+    priority: 'normal'
+  },
+  metadata: {
+    channel: 'web',
+    region: 'us-west'
+  }
+});
+
+console.log(session.id); // sess_a1b2c3d4e5f6
 ```
 
 ```json Response
 {
   "object": "session",
-  "id": "sess_01H...",
-  "agent_id": "coding_agent",
-  "created_at": "2026-01-27T10:00:00Z",
-  "metadata": { "env": "prod" },
-  "state": {},
+  "id": "sess_a1b2c3d4e5f6",
+  "agent_id": "customer-support",
+  "user_id": "user_123",
+  "created_at": "2026-01-31T04:00:00Z",
+  "updated_at": "2026-01-31T04:00:00Z",
+  "state": {
+    "status": "new",
+    "priority": "normal"
+  },
+  "metadata": {
+    "channel": "web",
+    "region": "us-west"
+  },
   "memory_count": 0,
   "turn_count": 0,
-  "ttl_expires_at": "2026-01-27T11:00:00Z"
+  "ttl_expires_at": "2026-01-31T05:00:00Z"
 }
 ```
 </CodeGroup>
 
+### Error Responses
+
+| Status Code | Error Code | Description |
+|-------------|------------|-------------|
+| 400 | `invalid_request` | Missing required fields or invalid data types |
+| 401 | `authentication_failed` | Invalid or missing API key |
+| 429 | `rate_limit_exceeded` | Too many requests (default: 100/min) |
+| 500 | `internal_error` | Server error (contact support if persists) |
+
+---
+
 ## Get Session
 
-Retrieve the full context including current state.
+`GET /v1/sessions/{session_id}`
 
-<ParamField path="session_id" type="string" required>
-  The ID of the session to retrieve.
-</ParamField>
+Retrieves a session by ID, including current state and metadata.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID (e.g., `sess_a1b2c3d4e5f6`) |
+
+### Response
+
+Same structure as Create Session response.
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl https://api.statebase.org/v1/sessions/sess_01H... \
-  -H "Authorization: Bearer <token>"
+curl https://api.statebase.org/v1/sessions/sess_a1b2c3d4e5f6 \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+session = sb.sessions.get(session_id="sess_a1b2c3d4e5f6")
+print(session.state)
+```
+
+```typescript TypeScript
+const session = await sb.sessions.get('sess_a1b2c3d4e5f6');
+console.log(session.state);
 ```
 </CodeGroup>
 
+### Error Responses
+
+| Status Code | Error Code | Description |
+|-------------|------------|-------------|
+| 404 | `session_not_found` | Session doesn't exist or has expired |
+| 401 | `authentication_failed` | Invalid API key |
+
+---
+
 ## Get Session Context
 
-The primary endpoint for building your agent's prompt. It performs a parallel lookup of the current State, relevant Semantic Memories (via vector search), and the most recent N turns.
+`POST /v1/sessions/{session_id}/context`
 
-<ParamField path="session_id" type="string" required>
-  The ID of the session to retrieve.
-</ParamField>
+**The most important endpoint for building agents.** Returns everything your agent needs in one call:
+- Current state
+- Relevant memories (via semantic search)
+- Recent conversation turns
 
-<ParamField body="query" type="string">
-  The search query for semantic memory retrieval (usually the user's current input).
-</ParamField>
+### Path Parameters
 
-<ParamField body="memory_limit" type="integer" default="5">
-  Number of semantic memories to retrieve.
-</ParamField>
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID |
 
-<ParamField body="turn_limit" type="integer" default="5">
-  Number of recent conversation turns to include.
-</ParamField>
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `query` | string | No | Search query for semantic memory retrieval (usually the user's current message) |
+| `memory_limit` | integer | No | Max memories to return (default: 5, max: 20) |
+| `turn_limit` | integer | No | Max recent turns to return (default: 10, max: 50) |
+
+### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | object | Current session state |
+| `memories` | array | Relevant memories (sorted by similarity score) |
+| `recent_turns` | array | Recent conversation turns (newest first) |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.statebase.org/v1/sessions/sess_01H.../context \
-  -H "Authorization: Bearer <token>" \
+curl -X POST https://api.statebase.org/v1/sessions/sess_abc123/context \
+  -H "X-API-Key: sb_your_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "Where did I park my car?",
-    "memory_limit": 3
+    "query": "What did I tell you about my preferences?",
+    "memory_limit": 5,
+    "turn_limit": 10
   }'
+```
+
+```python Python
+context = sb.sessions.get_context(
+    session_id="sess_abc123",
+    query="What did I tell you about my preferences?",
+    memory_limit=5,
+    turn_limit=10
+)
+
+# Use in your agent
+prompt = f"""
+Current state: {context['state']}
+Relevant memories: {context['memories']}
+Recent conversation: {context['recent_turns']}
+
+User: {user_message}
+"""
+```
+
+```typescript TypeScript
+const context = await sb.sessions.getContext('sess_abc123', {
+  query: 'What did I tell you about my preferences?',
+  memoryLimit: 5,
+  turnLimit: 10
+});
+
+// Use in your agent
+const prompt = `
+Current state: ${JSON.stringify(context.state)}
+Relevant memories: ${JSON.stringify(context.memories)}
+Recent conversation: ${JSON.stringify(context.recentTurns)}
+
+User: ${userMessage}
+`;
 ```
 
 ```json Response
 {
   "state": {
-    "status": "active",
-    "last_location": "Airport Level 4"
+    "user_preferences": {
+      "communication_style": "concise",
+      "language": "python"
+    },
+    "current_task": "code_review"
   },
   "memories": [
     {
-      "content": "User parked in Section B2 of Level 4.",
+      "id": "mem_xyz789",
+      "content": "User prefers concise responses without long explanations",
+      "type": "preference",
+      "score": 0.94,
+      "created_at": "2026-01-30T10:00:00Z"
+    },
+    {
+      "id": "mem_abc456",
+      "content": "User is a Python developer working on FastAPI projects",
       "type": "fact",
-      "score": 0.94
+      "score": 0.87,
+      "created_at": "2026-01-29T15:30:00Z"
     }
   ],
   "recent_turns": [
     {
-      "id": "turn_01H...",
-      "input": "I'm leaving for the flight now.",
-      "output": "Got it. I've noted your parking spot."
+      "id": "turn_123",
+      "input": {"type": "text", "content": "Review this code"},
+      "output": {"type": "text", "content": "Here's my review..."},
+      "created_at": "2026-01-31T03:45:00Z"
     }
   ]
 }
 ```
 </CodeGroup>
 
-## Delete Session
+---
 
-Permanently remove a session and all its distributed state (Redis + Postgres + Vector DB).
+## Update Session State
 
-<ParamField path="session_id" type="string" required>
-  The ID of the session to delete.
-</ParamField>
+`POST /v1/sessions/{session_id}/state`
+
+Updates the session's state. Creates a new state version for rollback capability.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `state` | object | ✅ Yes | New state (replaces current state entirely) |
+| `reasoning` | string | No | Why this update was made (for debugging) |
+
+### Response
+
+Returns updated session object.
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl -X DELETE https://api.statebase.org/v1/sessions/sess_01H... \
-  -H "Authorization: Bearer <token>"
+curl -X POST https://api.statebase.org/v1/sessions/sess_abc123/state \
+  -H "X-API-Key: sb_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state": {
+      "status": "in_progress",
+      "current_step": "gathering_requirements"
+    },
+    "reasoning": "User provided initial requirements"
+  }'
+```
+
+```python Python
+sb.sessions.update_state(
+    session_id="sess_abc123",
+    state={
+        "status": "in_progress",
+        "current_step": "gathering_requirements"
+    },
+    reasoning="User provided initial requirements"
+)
+```
+
+```typescript TypeScript
+await sb.sessions.updateState('sess_abc123', {
+  state: {
+    status: 'in_progress',
+    currentStep: 'gathering_requirements'
+  },
+  reasoning: 'User provided initial requirements'
+});
 ```
 </CodeGroup>
+
+---
+
+## Rollback Session
+
+`POST /v1/sessions/{session_id}/rollback`
+
+Reverts session state to a previous version. Creates a new version with the restored state.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | integer | ✅ Yes | State version to roll back to (0 = initial state) |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.statebase.org/v1/sessions/sess_abc123/rollback \
+  -H "X-API-Key: sb_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"version": 3}'
+```
+
+```python Python
+# Roll back to version 3
+restored_state = sb.sessions.rollback(
+    session_id="sess_abc123",
+    version=3
+)
+```
+
+```typescript TypeScript
+const restoredState = await sb.sessions.rollback('sess_abc123', 3);
+```
+</CodeGroup>
+
+---
+
+## Fork Session
+
+`POST /v1/sessions/{session_id}/fork`
+
+Creates a new session starting from a specific version of an existing session. Useful for debugging and "what-if" scenarios.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Source session ID |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | integer | No | State version to fork from (default: latest) |
+
+### Response
+
+Returns new session object with metadata indicating it was forked.
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.statebase.org/v1/sessions/sess_abc123/fork \
+  -H "X-API-Key: sb_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"version": 5}'
+```
+
+```python Python
+# Fork from version 5
+forked_session = sb.sessions.fork(
+    session_id="sess_abc123",
+    version=5
+)
+
+print(forked_session.id)  # sess_xyz789 (new ID)
+print(forked_session.metadata)  # {"forked_from": "sess_abc123", "forked_version": 5}
+```
+
+```typescript TypeScript
+const forkedSession = await sb.sessions.fork('sess_abc123', 5);
+console.log(forkedSession.id); // sess_xyz789
+```
+</CodeGroup>
+
+---
+
+## List Sessions
+
+`GET /v1/sessions`
+
+Lists all sessions for your account, with pagination.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | integer | No | Max sessions to return (default: 20, max: 100) |
+| `starting_after` | string | No | Session ID to start after (for pagination) |
+| `agent_id` | string | No | Filter by agent ID |
+| `user_id` | string | No | Filter by user ID |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl "https://api.statebase.org/v1/sessions?limit=10&agent_id=customer-support" \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+sessions = sb.sessions.list(
+    limit=10,
+    agent_id="customer-support"
+)
+
+for session in sessions:
+    print(session.id, session.created_at)
+```
+
+```typescript TypeScript
+const sessions = await sb.sessions.list({
+  limit: 10,
+  agentId: 'customer-support'
+});
+```
+</CodeGroup>
+
+---
+
+## Delete Session
+
+`DELETE /v1/sessions/{session_id}`
+
+Permanently deletes a session and all associated data (state, turns, memories).
+
+**Warning**: This action is irreversible.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID to delete |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.statebase.org/v1/sessions/sess_abc123 \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+sb.sessions.delete(session_id="sess_abc123")
+```
+
+```typescript TypeScript
+await sb.sessions.delete('sess_abc123');
+```
+</CodeGroup>
+
+---
+
+## Rate Limits
+
+| Tier | Requests/Minute | Burst |
+|------|-----------------|-------|
+| **Free** | 100 | 200 |
+| **Pro** | 1,000 | 2,000 |
+| **Enterprise** | Custom | Custom |
+
+**Rate limit headers** (included in all responses):
+- `X-RateLimit-Limit`: Max requests per minute
+- `X-RateLimit-Remaining`: Remaining requests
+- `X-RateLimit-Reset`: Unix timestamp when limit resets
+
+---
+
+## Webhooks
+
+Subscribe to session events:
+
+| Event | Description |
+|-------|-------------|
+| `session.created` | New session created |
+| `session.updated` | Session state or metadata changed |
+| `session.deleted` | Session deleted |
+| `session.expired` | Session TTL expired |
+
+Configure webhooks in [Dashboard → Webhooks](https://app.statebase.org/webhooks).
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Use `get_context()` for every turn** (it's optimized for agent prompts)
+- **Include `reasoning` in state updates** (helps with debugging)
+- **Set appropriate TTLs** (don't keep sessions forever)
+- **Use `user_id` for multi-tenant isolation**
+
+### ❌ Avoid This
+- **Don't poll for updates** (use webhooks instead)
+- **Don't store sensitive data in state** (use encrypted metadata)
+- **Don't create a new session per message** (reuse sessions for conversations)
+
+---
+
+## Next Steps
+
+- **[Turns API](/api-reference/turns)**: Log conversation interactions
+- **[Memory API](/api-reference/memory)**: Store long-term knowledge
+- **[Traces API](/api-reference/traces)**: Audit and debugging
+
+---
+
+**Need help?** Join our [Discord](https://discord.gg/statebase) or email support@statebase.org

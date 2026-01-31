@@ -1,0 +1,592 @@
+---
+title: "Human-in-the-Loop Pattern"
+description: "Build agents that know when to escalate to humans for critical decisions"
+---
+
+# Human-in-the-Loop Pattern
+
+The most reliable AI agents know their limits. **Human-in-the-Loop (HITL)** is the pattern of escalating to humans when the agent encounters uncertainty, risk, or complexity beyond its capabilities.
+
+---
+
+## When to Escalate
+
+Not every decision needs human approval. Use this framework:
+
+| Decision Type | Risk Level | Escalation Strategy |
+|---------------|------------|---------------------|
+| **Informational** (weather, facts) | Low | ✅ Fully automated |
+| **Preferences** (recommendations) | Low-Medium | ⚠️ Confirm before acting |
+| **Transactional** (bookings, orders) | Medium | ⚠️ Require explicit confirmation |
+| **Financial** (payments, refunds) | High | 🚨 Always escalate |
+| **Legal/Medical** (advice, diagnosis) | Critical | 🚨 Always escalate |
+| **Destructive** (deletions, cancellations) | High | 🚨 Require multi-factor confirmation |
+
+---
+
+## The Core Pattern
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+def agent_with_hitl(session_id, user_message):
+    # 1. Agent processes request
+    response = llm.generate(user_message)
+    
+    # 2. Assess risk level
+    risk_level = assess_risk(response)
+    
+    # 3. Decide: automate or escalate
+    if risk_level == "low":
+        # Execute automatically
+        result = execute_action(response.action)
+        return result
+    
+    elif risk_level == "medium":
+        # Request confirmation
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                "pending_action": response.action,
+                "requires_confirmation": True
+            },
+            reasoning="Awaiting user confirmation for medium-risk action"
+        )
+        return "I can do that. Please confirm: [Yes/No]"
+    
+    else:  # high or critical
+        # Escalate to human agent
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                "escalated": True,
+                "escalation_reason": "High-risk action detected",
+                "pending_action": response.action
+            },
+            reasoning="Escalated to human agent"
+        )
+        
+        notify_human_agent(session_id)
+        return "I've escalated this to a human agent who will assist you shortly."
+```
+
+---
+
+## Risk Assessment
+
+Implement a risk scoring system:
+
+```python
+def assess_risk(action):
+    """Assess risk level of an action"""
+    
+    # Define risk indicators
+    high_risk_keywords = [
+        "delete", "cancel", "refund", "payment",
+        "medical", "legal", "diagnosis", "prescription"
+    ]
+    
+    medium_risk_keywords = [
+        "book", "order", "purchase", "schedule",
+        "modify", "update", "change"
+    ]
+    
+    # Check action type
+    action_text = str(action).lower()
+    
+    # Critical risk
+    if any(keyword in action_text for keyword in high_risk_keywords):
+        return "critical"
+    
+    # Medium risk
+    if any(keyword in action_text for keyword in medium_risk_keywords):
+        return "medium"
+    
+    # Additional checks
+    if involves_money(action) and amount > 100:
+        return "high"
+    
+    if involves_personal_data(action):
+        return "medium"
+    
+    # Default: low risk
+    return "low"
+
+def involves_money(action):
+    """Check if action involves financial transaction"""
+    return "amount" in action or "price" in action or "cost" in action
+
+def involves_personal_data(action):
+    """Check if action accesses sensitive data"""
+    sensitive_fields = ["ssn", "credit_card", "password", "medical_record"]
+    return any(field in str(action).lower() for field in sensitive_fields)
+```
+
+---
+
+## Confirmation Workflows
+
+### Simple Confirmation
+
+```python
+def handle_confirmation(session_id, user_response):
+    state = sb.sessions.get(session_id).state
+    
+    if not state.get("requires_confirmation"):
+        return "No pending action to confirm."
+    
+    if user_response.lower() in ["yes", "confirm", "proceed"]:
+        # Execute pending action
+        action = state["pending_action"]
+        result = execute_action(action)
+        
+        # Clear confirmation flag
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                **state,
+                "requires_confirmation": False,
+                "last_action_result": result
+            },
+            reasoning="User confirmed action, executed successfully"
+        )
+        
+        return f"Done! {result}"
+    
+    else:
+        # User declined
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                **state,
+                "requires_confirmation": False,
+                "pending_action": None
+            },
+            reasoning="User declined action"
+        )
+        
+        return "Okay, I've cancelled that action."
+```
+
+### Multi-Factor Confirmation
+
+For critical actions, require multiple confirmations:
+
+```python
+def request_multi_factor_confirmation(session_id, action):
+    """Require email + SMS confirmation for critical actions"""
+    
+    # Generate confirmation code
+    code = generate_confirmation_code()
+    
+    # Send to user via email and SMS
+    send_email_confirmation(user_email, code)
+    send_sms_confirmation(user_phone, code)
+    
+    # Store in state
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={
+            "pending_critical_action": action,
+            "confirmation_code": hash(code),  # Store hash, not plaintext
+            "confirmation_expires_at": time.time() + 300,  # 5 min expiry
+            "confirmation_attempts": 0
+        },
+        reasoning="Multi-factor confirmation required"
+    )
+    
+    return "For security, I've sent a confirmation code to your email and phone. Please enter it to proceed."
+
+def verify_confirmation_code(session_id, user_code):
+    state = sb.sessions.get(session_id).state
+    
+    # Check expiry
+    if time.time() > state.get("confirmation_expires_at", 0):
+        return "Confirmation code expired. Please request a new one."
+    
+    # Check attempts
+    if state.get("confirmation_attempts", 0) >= 3:
+        return "Too many failed attempts. Action cancelled for security."
+    
+    # Verify code
+    if hash(user_code) == state.get("confirmation_code"):
+        # Execute action
+        action = state["pending_critical_action"]
+        result = execute_action(action)
+        
+        # Clear confirmation state
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                **state,
+                "pending_critical_action": None,
+                "confirmation_code": None,
+                "last_action_result": result
+            },
+            reasoning="Multi-factor confirmation successful"
+        )
+        
+        return f"Confirmed! {result}"
+    
+    else:
+        # Increment attempts
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                **state,
+                "confirmation_attempts": state.get("confirmation_attempts", 0) + 1
+            },
+            reasoning="Incorrect confirmation code"
+        )
+        
+        return "Incorrect code. Please try again."
+```
+
+---
+
+## Human Agent Handoff
+
+When escalating, provide context to the human agent:
+
+```python
+def escalate_to_human(session_id, reason):
+    """Escalate session to human agent with full context"""
+    
+    # Get full conversation history
+    context = sb.sessions.get_context(
+        session_id=session_id,
+        turn_limit=50  # All recent turns
+    )
+    
+    # Create escalation ticket
+    ticket = {
+        "session_id": session_id,
+        "reason": reason,
+        "conversation_history": context["recent_turns"],
+        "current_state": context["state"],
+        "relevant_memories": context["memories"],
+        "escalated_at": time.time(),
+        "priority": calculate_priority(reason)
+    }
+    
+    # Notify human agent
+    ticket_id = create_support_ticket(ticket)
+    
+    # Update session state
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={
+            **context["state"],
+            "escalated": True,
+            "escalation_ticket_id": ticket_id,
+            "escalation_reason": reason,
+            "human_agent_assigned": None  # Will be set when agent picks up
+        },
+        reasoning=f"Escalated to human: {reason}"
+    )
+    
+    # Log escalation
+    sb.sessions.add_turn(
+        session_id=session_id,
+        input={"type": "system", "content": "Escalation triggered"},
+        output={"type": "escalation", "ticket_id": ticket_id},
+        metadata={"reason": reason, "priority": ticket["priority"]},
+        reasoning="Session escalated to human agent"
+    )
+    
+    return ticket_id
+
+def calculate_priority(reason):
+    """Determine escalation priority"""
+    if "payment" in reason.lower() or "security" in reason.lower():
+        return "urgent"
+    elif "complaint" in reason.lower() or "frustrated" in reason.lower():
+        return "high"
+    else:
+        return "normal"
+```
+
+---
+
+## Confidence-Based Escalation
+
+Escalate when the agent is uncertain:
+
+```python
+def answer_with_confidence_check(session_id, question):
+    # Generate answer with confidence score
+    response = llm.generate(
+        prompt=f"""
+        Question: {question}
+        
+        Provide:
+        1. Your answer
+        2. Confidence (0-100)
+        
+        Format:
+        ANSWER: [answer]
+        CONFIDENCE: [score]
+        """
+    )
+    
+    answer = extract_field(response, "ANSWER")
+    confidence = int(extract_field(response, "CONFIDENCE"))
+    
+    # Escalate if confidence is low
+    if confidence < 70:
+        escalate_to_human(
+            session_id=session_id,
+            reason=f"Low confidence ({confidence}%) on question: {question}"
+        )
+        return "I'm not entirely sure about this. Let me connect you with a specialist."
+    
+    # Log confidence
+    sb.sessions.add_turn(
+        session_id=session_id,
+        input=question,
+        output=answer,
+        metadata={"confidence": confidence},
+        reasoning=f"Answered with {confidence}% confidence"
+    )
+    
+    return answer
+```
+
+---
+
+## Approval Workflows
+
+For enterprise use cases, implement approval chains:
+
+```python
+def request_manager_approval(session_id, action, amount):
+    """Request approval from user's manager"""
+    
+    # Get user info
+    user = get_user_from_session(session_id)
+    manager = get_manager(user.id)
+    
+    # Create approval request
+    approval_id = create_approval_request({
+        "session_id": session_id,
+        "action": action,
+        "amount": amount,
+        "requester": user.id,
+        "approver": manager.id,
+        "status": "pending"
+    })
+    
+    # Notify manager
+    send_approval_notification(manager.email, approval_id)
+    
+    # Update session state
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={
+            "pending_approval": True,
+            "approval_id": approval_id,
+            "approval_status": "pending"
+        },
+        reasoning="Awaiting manager approval"
+    )
+    
+    return f"This requires manager approval. I've notified {manager.name}."
+
+def handle_approval_response(approval_id, approved):
+    """Process manager's approval decision"""
+    
+    approval = get_approval_request(approval_id)
+    session_id = approval["session_id"]
+    
+    if approved:
+        # Execute action
+        result = execute_action(approval["action"])
+        
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                "pending_approval": False,
+                "approval_status": "approved",
+                "action_result": result
+            },
+            reasoning="Manager approved, action executed"
+        )
+        
+        notify_user(approval["requester"], f"Approved! {result}")
+    
+    else:
+        # Reject
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                "pending_approval": False,
+                "approval_status": "rejected"
+            },
+            reasoning="Manager rejected request"
+        )
+        
+        notify_user(approval["requester"], "Your request was not approved.")
+```
+
+---
+
+## Monitoring Escalations
+
+Track escalation metrics to improve your agent:
+
+```python
+def analyze_escalations():
+    """Analyze why agents are escalating"""
+    
+    # Get all escalated sessions from last 7 days
+    escalations = sb.traces.list(
+        action="session.escalated",
+        created_after=time.time() - (7 * 24 * 3600)
+    )
+    
+    # Group by reason
+    reasons = {}
+    for escalation in escalations:
+        reason = escalation.details.get("reason", "unknown")
+        reasons[reason] = reasons.get(reason, 0) + 1
+    
+    # Calculate escalation rate
+    total_sessions = count_sessions_last_7_days()
+    escalation_rate = len(escalations) / total_sessions
+    
+    print(f"Escalation rate: {escalation_rate:.1%}")
+    print(f"Top escalation reasons:")
+    for reason, count in sorted(reasons.items(), key=lambda x: x[1], reverse=True):
+        print(f"  {reason}: {count}")
+    
+    # Alert if escalation rate is too high
+    if escalation_rate > 0.15:  # More than 15%
+        alert_team(f"High escalation rate: {escalation_rate:.1%}")
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Define clear escalation criteria** (risk levels, confidence thresholds)
+- **Provide context to human agents** (full conversation history)
+- **Log all escalations** (track patterns and improve)
+- **Implement timeouts** (don't wait forever for confirmation)
+- **Test edge cases** (what if user says "maybe"?)
+
+### ❌ Avoid This
+- **Don't escalate everything** (defeats the purpose of automation)
+- **Don't lose context during handoff** (frustrates users)
+- **Don't ignore escalation patterns** (they indicate training gaps)
+- **Don't make confirmation flows too complex** (users will abandon)
+
+---
+
+## Complete Example
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+class HITLAgent:
+    def __init__(self, session_id):
+        self.session_id = session_id
+    
+    def process(self, user_message):
+        # Check if waiting for confirmation
+        state = sb.sessions.get(self.session_id).state
+        
+        if state.get("requires_confirmation"):
+            return self.handle_confirmation(user_message)
+        
+        # Generate response
+        response = llm.generate(user_message)
+        
+        # Assess risk
+        risk = self.assess_risk(response)
+        
+        if risk == "low":
+            return self.execute_automatically(response)
+        elif risk == "medium":
+            return self.request_confirmation(response)
+        else:
+            return self.escalate(response, risk)
+    
+    def assess_risk(self, response):
+        # Implement risk assessment logic
+        if "delete" in str(response).lower():
+            return "critical"
+        elif "book" in str(response).lower():
+            return "medium"
+        return "low"
+    
+    def execute_automatically(self, response):
+        result = execute_action(response.action)
+        sb.sessions.add_turn(
+            session_id=self.session_id,
+            input=response.input,
+            output=result,
+            reasoning="Executed automatically (low risk)"
+        )
+        return result
+    
+    def request_confirmation(self, response):
+        sb.sessions.update_state(
+            session_id=self.session_id,
+            state={"requires_confirmation": True, "pending_action": response.action},
+            reasoning="Requesting user confirmation"
+        )
+        return f"I can {response.action}. Confirm? [Yes/No]"
+    
+    def handle_confirmation(self, user_response):
+        state = sb.sessions.get(self.session_id).state
+        
+        if user_response.lower() == "yes":
+            result = execute_action(state["pending_action"])
+            sb.sessions.update_state(
+                session_id=self.session_id,
+                state={"requires_confirmation": False},
+                reasoning="User confirmed"
+            )
+            return result
+        else:
+            sb.sessions.update_state(
+                session_id=self.session_id,
+                state={"requires_confirmation": False},
+                reasoning="User declined"
+            )
+            return "Cancelled."
+    
+    def escalate(self, response, risk):
+        ticket_id = escalate_to_human(self.session_id, f"{risk} risk: {response.action}")
+        return f"I've escalated this to a specialist (Ticket #{ticket_id})."
+
+# Usage
+agent = HITLAgent(session_id="sess_123")
+
+# Low risk - executes automatically
+agent.process("What's the weather?")
+
+# Medium risk - requests confirmation
+agent.process("Book a flight to NYC")
+agent.process("Yes")  # Confirms
+
+# High risk - escalates
+agent.process("Delete all my data")
+```
+
+---
+
+## Next Steps
+
+- **[Tool Calling Pattern](/patterns/tool-calling)**: Combine HITL with external tools
+- **[Multi-Agent Pattern](/patterns/multi-agent)**: Coordinate human and AI agents
+- **[Production Playbook](/playbook/incident-recovery)**: Handle escalation incidents
+
+---
+
+**Key Takeaway**: The best AI agents know when to ask for help. HITL isn't a failure—it's a feature that builds trust.

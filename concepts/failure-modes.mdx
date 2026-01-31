@@ -1,0 +1,472 @@
+---
+title: "Agent Failure Modes"
+description: "Common ways AI agents fail in production and how StateBase helps you recover"
+---
+
+# Agent Failure Modes
+
+AI agents fail in ways that traditional software doesn't. Understanding these **failure modes** is essential to building resilient production systems. StateBase is designed to help you **detect, debug, and recover** from each of these patterns.
+
+---
+
+## The 7 Deadly Failures
+
+### 1. **Hallucination Corruption**
+
+**What happens**: The LLM generates plausible-sounding but completely false information, which gets stored in state or memory.
+
+```python
+# User: "What's my account balance?"
+# Agent (hallucinating): "Your balance is $1,234.56"
+# Reality: User has never provided account info
+
+# State gets corrupted:
+state = {"account_balance": 1234.56}  # ❌ Completely made up
+```
+
+**Detection**:
+```python
+# Check if state contains unverified data
+if "account_balance" in state and not state.get("balance_verified"):
+    alert("Potential hallucination: unverified balance in state")
+```
+
+**Recovery with StateBase**:
+```python
+# Roll back to before the hallucination
+sb.sessions.rollback(session_id=session.id, version=previous_version)
+
+# Add a safety check
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"requires_verification": True},
+    reasoning="Detected unverified financial data"
+)
+```
+
+**Prevention**:
+- **Never trust LLM output for critical data** (balances, medical info, legal advice)
+- **Always verify with authoritative sources** (APIs, databases)
+- **Use structured output** (JSON schema validation) to catch hallucinations early
+
+---
+
+### 2. **Context Overflow**
+
+**What happens**: The conversation history grows too large, causing:
+- Increased latency (slow responses)
+- Increased cost (more tokens)
+- Context window limits (truncation)
+
+```python
+# After 50 turns, context is 100,000 tokens
+context = sb.sessions.get_context(
+    session_id=session.id,
+    turn_limit=50  # ❌ Too many turns
+)
+
+# LLM call fails: "Context exceeds 128k token limit"
+```
+
+**Detection**:
+```python
+# Monitor context size
+turn_count = len(sb.sessions.list_turns(session_id=session.id))
+
+if turn_count > 30:
+    alert("Session approaching context limit")
+```
+
+**Recovery with StateBase**:
+```python
+# Option 1: Summarize old turns and start fresh
+summary = llm.summarize(old_turns)
+sb.memory.add(
+    content=summary,
+    type="conversation_summary",
+    session_id=session.id
+)
+
+# Create new session with summary
+new_session = sb.sessions.create(
+    agent_id=agent_id,
+    user_id=user_id,
+    initial_state={"previous_summary": summary}
+)
+
+# Option 2: Use sliding window (only last N turns)
+context = sb.sessions.get_context(
+    session_id=session.id,
+    turn_limit=10  # ✅ Only recent turns
+)
+```
+
+**Prevention**:
+- **Set turn limits** in `get_context()` (10-20 is usually enough)
+- **Summarize periodically** (every 20 turns)
+- **Use memory for long-term facts** (don't rely on turn history)
+
+---
+
+### 3. **State Drift**
+
+**What happens**: The agent's internal state diverges from reality because external systems changed.
+
+```python
+# Agent state: {"order_status": "pending"}
+# Reality: Order was cancelled by user in another app
+
+# Agent continues as if order is still pending
+# User: "Why hasn't my order shipped?"
+# Agent: "Your order is still pending, should ship soon" ❌
+```
+
+**Detection**:
+```python
+# Periodically sync state with source of truth
+actual_status = get_order_status_from_db(order_id)
+
+if state["order_status"] != actual_status:
+    alert("State drift detected")
+```
+
+**Recovery with StateBase**:
+```python
+# Update state with authoritative data
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"order_status": actual_status, "synced_at": now()},
+    reasoning="Synced with order database"
+)
+```
+
+**Prevention**:
+- **Sync state with external systems** before critical operations
+- **Use TTLs on cached data** (e.g., `{"weather": {...}, "cached_until": timestamp}`)
+- **Validate state** against source of truth periodically
+
+---
+
+### 4. **Tool Call Failures**
+
+**What happens**: The agent calls an external API (weather, database, payment processor) and it fails.
+
+```python
+# Agent tries to call weather API
+try:
+    weather = call_weather_api("San Francisco")
+except APIError:
+    # ❌ Agent doesn't know how to handle this
+    # Conversation breaks
+```
+
+**Detection**:
+```python
+# Log all tool call failures
+try:
+    result = call_external_api()
+except Exception as e:
+    sb.sessions.add_turn(
+        session_id=session.id,
+        input={"type": "tool_call", "tool": "weather_api"},
+        output={"type": "error", "message": str(e)},
+        reasoning=f"Tool call failed: {e}"
+    )
+```
+
+**Recovery with StateBase**:
+```python
+# Checkpoint before tool call
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"pre_tool_call_state": current_state},
+    reasoning="Checkpoint before weather API call"
+)
+
+# Try tool call
+try:
+    result = call_weather_api()
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"weather": result},
+        reasoning="Weather API call succeeded"
+    )
+except APIError:
+    # Roll back to pre-call state
+    sb.sessions.rollback(session_id=session.id, version=previous_version)
+    
+    # Inform user gracefully
+    return "I'm having trouble accessing weather data right now. Can I help with something else?"
+```
+
+**Prevention**:
+- **Always checkpoint before risky operations**
+- **Implement retry logic** (with exponential backoff)
+- **Have fallback responses** for common failures
+
+---
+
+### 5. **Infinite Loops**
+
+**What happens**: The agent gets stuck repeating the same action over and over.
+
+```python
+# Turn 10: "Let me search for that..."
+# Turn 11: "Let me search for that..."
+# Turn 12: "Let me search for that..."
+# ❌ Agent is stuck in a loop
+```
+
+**Detection**:
+```python
+# Check for repeated outputs
+recent_turns = sb.sessions.list_turns(session_id=session.id, limit=5)
+outputs = [turn.output.content for turn in recent_turns]
+
+if len(set(outputs)) == 1:  # All outputs are identical
+    alert("Infinite loop detected")
+```
+
+**Recovery with StateBase**:
+```python
+# Detect loop
+if is_looping(session.id):
+    # Roll back to before loop started
+    sb.sessions.rollback(session_id=session.id, version=loop_start_version)
+    
+    # Add loop prevention flag
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"loop_detected": True, "attempted_action": "search"},
+        reasoning="Detected infinite loop, preventing retry"
+    )
+    
+    # Try different approach
+    return "I'm having trouble with that search. Let me try a different approach."
+```
+
+**Prevention**:
+- **Track action history** in state (e.g., `{"attempted_actions": ["search", "search"]}`)
+- **Limit retries** (max 3 attempts per action)
+- **Use circuit breakers** (stop trying after repeated failures)
+
+---
+
+### 6. **Permission Violations**
+
+**What happens**: The agent attempts an action the user isn't authorized for.
+
+```python
+# User: "Delete all customer data"
+# Agent: "Sure, deleting..." ❌ DANGER!
+
+# Agent should check permissions first
+if not user.has_permission("delete_customer_data"):
+    return "You don't have permission for that action"
+```
+
+**Detection**:
+```python
+# Log all permission checks
+if not has_permission(user_id, action):
+    sb.traces.create(
+        session_id=session.id,
+        action="permission_denied",
+        details={"user_id": user_id, "attempted_action": action}
+    )
+```
+
+**Recovery with StateBase**:
+```python
+# If agent violates permissions, roll back immediately
+if permission_violation_detected:
+    sb.sessions.rollback(session_id=session.id, version=safe_version)
+    
+    # Flag session for review
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"flagged_for_review": True, "reason": "permission_violation"},
+        reasoning="Agent attempted unauthorized action"
+    )
+    
+    # Notify security team
+    alert_security(session.id)
+```
+
+**Prevention**:
+- **Implement permission checks** before every destructive operation
+- **Use allowlists** (explicitly define what agent CAN do, not what it can't)
+- **Require human confirmation** for high-risk actions
+
+---
+
+### 7. **Memory Pollution**
+
+**What happens**: The agent stores incorrect or irrelevant information in long-term memory.
+
+```python
+# User (joking): "I hate pizza"
+# Agent stores: "User hates pizza" ❌
+
+# Later, in a different session:
+# Agent: "I know you hate pizza, so I won't recommend Italian restaurants"
+# User: "What? I love pizza!"
+```
+
+**Detection**:
+```python
+# Review memories periodically
+memories = sb.memory.search(query="user preferences", session_id=session.id)
+
+# Flag low-confidence memories
+for memory in memories:
+    if memory.metadata.get("confidence") < 0.7:
+        alert("Low-confidence memory detected")
+```
+
+**Recovery with StateBase**:
+```python
+# Delete incorrect memory
+sb.memory.delete(memory_id=incorrect_memory.id)
+
+# Add corrected memory
+sb.memory.add(
+    content="User loves pizza",
+    type="preference",
+    session_id=session.id,
+    metadata={"confidence": 1.0, "corrected": True}
+)
+```
+
+**Prevention**:
+- **Confirm before storing preferences** ("Just to confirm, you prefer X?")
+- **Use confidence scores** (only store high-confidence facts)
+- **Allow users to review/edit memories** (via dashboard)
+
+---
+
+## Failure Detection Framework
+
+Implement this monitoring system to catch failures early:
+
+```python
+class FailureDetector:
+    def __init__(self, session_id):
+        self.session_id = session_id
+        self.alerts = []
+    
+    def check_hallucination(self, state):
+        """Detect unverified critical data"""
+        critical_fields = ["account_balance", "medical_diagnosis", "legal_advice"]
+        for field in critical_fields:
+            if field in state and not state.get(f"{field}_verified"):
+                self.alerts.append(f"Unverified {field} detected")
+    
+    def check_context_overflow(self):
+        """Detect excessive turn count"""
+        turn_count = len(sb.sessions.list_turns(session_id=self.session_id))
+        if turn_count > 30:
+            self.alerts.append(f"Context overflow: {turn_count} turns")
+    
+    def check_infinite_loop(self):
+        """Detect repeated actions"""
+        recent_turns = sb.sessions.list_turns(session_id=self.session_id, limit=5)
+        outputs = [turn.output.content for turn in recent_turns]
+        if len(set(outputs)) == 1:
+            self.alerts.append("Infinite loop detected")
+    
+    def check_tool_failures(self):
+        """Detect repeated tool call failures"""
+        traces = sb.traces.list(session_id=self.session_id, action="tool_call.failed")
+        if len(traces) > 3:
+            self.alerts.append(f"Multiple tool failures: {len(traces)}")
+    
+    def run_all_checks(self, state):
+        """Run all failure detection checks"""
+        self.check_hallucination(state)
+        self.check_context_overflow()
+        self.check_infinite_loop()
+        self.check_tool_failures()
+        
+        if self.alerts:
+            notify_team(self.alerts)
+        
+        return len(self.alerts) == 0  # True if healthy
+```
+
+---
+
+## Recovery Decision Tree
+
+When a failure is detected, use this decision tree:
+
+```
+Failure Detected
+    ├─ Is it recoverable?
+    │   ├─ Yes → Roll back to last good state
+    │   └─ No → Escalate to human
+    │
+    ├─ Is it a systemic issue?
+    │   ├─ Yes → Alert engineering team
+    │   └─ No → Log and continue
+    │
+    └─ Can we prevent recurrence?
+        ├─ Yes → Update agent logic
+        └─ No → Add to monitoring
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Monitor for all 7 failure modes** (use the detection framework above)
+- **Checkpoint before risky operations** (tool calls, state updates)
+- **Implement graceful degradation** (fallback responses when tools fail)
+- **Log everything** (you'll need it for debugging)
+- **Test failure scenarios** (inject failures in staging)
+
+### ❌ Avoid This
+- **Don't ignore repeated failures** (they indicate systemic issues)
+- **Don't trust LLM output blindly** (always validate critical data)
+- **Don't let sessions grow unbounded** (summarize or split)
+- **Don't skip permission checks** (security > convenience)
+
+---
+
+## Testing Failure Modes
+
+Inject failures in your test environment to verify recovery:
+
+```python
+# Test hallucination recovery
+def test_hallucination_recovery():
+    session = sb.sessions.create(agent_id="test-agent")
+    
+    # Inject hallucinated data
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"account_balance": 99999.99},  # Fake data
+        reasoning="Test: Injected hallucination"
+    )
+    
+    # Verify detection
+    detector = FailureDetector(session.id)
+    assert not detector.check_hallucination(session.state)
+    
+    # Verify recovery
+    sb.sessions.rollback(session_id=session.id, version=0)
+    assert "account_balance" not in sb.sessions.get(session.id).state
+```
+
+---
+
+## Next Steps
+
+- **[Checkpoints & Rollbacks](/concepts/checkpoints-rollbacks)**: Learn recovery strategies
+- **[Replay & Audit](/concepts/replay-audit)**: Debug failures in production
+- **[Hallucination Recovery Demo](/demos/hallucination-recovery)**: See it in action
+
+---
+
+**Key Takeaway**: AI agents **will** fail. The question is whether you can **detect and recover** fast enough. StateBase gives you the tools to turn failures into learning opportunities.

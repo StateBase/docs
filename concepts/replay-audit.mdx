@@ -1,0 +1,383 @@
+---
+title: "Replay & Audit"
+description: "Debug production agents by replaying conversations and analyzing decision traces"
+---
+
+# Replay & Audit
+
+The hardest part of building AI agents isn't making them work in development—it's **debugging them in production** when they fail in unexpected ways. StateBase's replay and audit system gives you **complete visibility** into every decision your agent makes.
+
+---
+
+## The Production Debugging Problem
+
+Traditional debugging doesn't work for AI agents:
+
+```python
+# Traditional software:
+if user_input == "book flight":
+    book_flight()  # Deterministic, reproducible
+
+# AI agents:
+if llm.generate(user_input).contains("book"):
+    book_flight()  # Non-deterministic, hard to reproduce
+```
+
+**The challenge**: When an agent fails in production, you need to:
+1. **Reproduce the exact conversation** that led to the failure
+2. **Understand why** the agent made each decision
+3. **Test fixes** without affecting live users
+
+StateBase solves this with **Replay** and **Audit Trails**.
+
+---
+
+## Replay: Time-Travel Debugging
+
+**Replay** lets you recreate the exact state of a conversation at any point in time, then **fork it** to test fixes.
+
+### How It Works
+
+Every session in StateBase stores:
+- **All turns** (input/output pairs)
+- **All state versions** (snapshots after each update)
+- **All traces** (which operations were performed)
+
+You can use this data to "replay" a conversation:
+
+```python
+# Production session failed at turn 15
+# Replay it locally to debug
+
+# 1. Get the full conversation history
+turns = sb.sessions.list_turns(session_id="sess_prod_123", limit=20)
+
+# 2. Get the state at turn 14 (just before failure)
+state_versions = sb.sessions.list_state_versions(session_id="sess_prod_123")
+pre_failure_state = state_versions[14]
+
+# 3. Fork the session from that point
+debug_session = sb.sessions.fork(
+    session_id="sess_prod_123",
+    version=14
+)
+
+# 4. Replay turn 15 with your fix
+response = your_fixed_agent(
+    session_id=debug_session.id,
+    user_input=turns[14].input.content
+)
+
+# 5. Compare with original failure
+print(f"Original output: {turns[14].output.content}")
+print(f"Fixed output: {response}")
+```
+
+### Replay in the Dashboard
+
+The StateBase Dashboard provides a **visual replay interface**:
+
+1. Navigate to the failed session
+2. Click the **"Replay"** tab
+3. Scrub through the conversation timeline
+4. Click **"Fork from here"** to create a debug session
+5. Test your fix in the forked session
+
+**Demo**: [Watch a replay walkthrough →](/demos/debugging-replay)
+
+---
+
+## Audit Trails: Understanding Decisions
+
+Every operation in StateBase creates an **audit trace** that explains *why* something happened.
+
+### What Gets Traced?
+
+| Operation | Trace Created | Information Logged |
+|-----------|---------------|-------------------|
+| `sessions.create()` | ✅ | `agent_id`, `user_id`, `initial_state` |
+| `sessions.update_state()` | ✅ | `reasoning`, `state_diff`, `actor` |
+| `sessions.add_turn()` | ✅ | `input`, `output`, `reasoning`, `metadata` |
+| `memory.add()` | ✅ | `content`, `type`, `tags`, `session_id` |
+| `sessions.rollback()` | ✅ | `from_version`, `to_version`, `reason` |
+| `sessions.fork()` | ✅ | `source_session`, `fork_version` |
+
+### Viewing Traces
+
+```python
+# Get all traces for a session
+traces = sb.traces.list(session_id="sess_123", limit=50)
+
+for trace in traces:
+    print(f"{trace.timestamp}: {trace.action} by {trace.actor}")
+    print(f"  Reason: {trace.details.get('reasoning')}")
+```
+
+**Example output**:
+```
+2024-03-15 10:23:45: session.created by api_key_abc123
+  Reason: New customer support conversation
+
+2024-03-15 10:24:12: state.updated by api_key_abc123
+  Reason: User provided account number
+
+2024-03-15 10:24:58: turn.added by api_key_abc123
+  Reason: Agent responded with account details
+
+2024-03-15 10:25:30: state.rolled_back by api_key_abc123
+  Reason: Agent exposed sensitive data, reverting to safe state
+```
+
+---
+
+## The Reasoning Field: Your Debug Log
+
+Every state update and turn should include a **reasoning** field:
+
+```python
+# ❌ Bad: No reasoning
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"step": "confirmed"}
+)
+
+# ✅ Good: Clear reasoning
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"step": "confirmed", "confirmation_id": "ABC123"},
+    reasoning="User confirmed booking via SMS code"
+)
+```
+
+**Why this matters**: When debugging a failed session 3 weeks later, you'll thank yourself for writing clear reasoning.
+
+### Reasoning Best Practices
+
+```python
+# ✅ Specific and actionable
+reasoning="GPT-4 suggested deleting user data, blocked by safety filter"
+
+# ✅ Includes context
+reasoning="User said 'yes' to confirmation prompt, proceeding with payment"
+
+# ✅ Explains tool usage
+reasoning="Called weather API for San Francisco, cached result for 1 hour"
+
+# ❌ Too vague
+reasoning="Updated state"
+
+# ❌ No context
+reasoning="User input processed"
+```
+
+---
+
+## Debugging Patterns
+
+### Pattern 1: Root Cause Analysis
+
+When a session fails, work backwards through the traces:
+
+```python
+# Session failed at turn 20
+# Find the root cause
+
+traces = sb.traces.list(session_id="sess_failed", limit=100)
+
+# Look for anomalies:
+# - Unexpected state transitions
+# - Missing reasoning
+# - Rollbacks (sign of earlier failure)
+# - Tool call errors
+
+for trace in reversed(traces):
+    if trace.action == "state.rolled_back":
+        print(f"Rollback detected at {trace.timestamp}")
+        print(f"Reason: {trace.details['reasoning']}")
+        # This is likely where things started going wrong
+```
+
+### Pattern 2: Comparative Analysis
+
+Compare a successful session with a failed one:
+
+```python
+# Successful session
+success_traces = sb.traces.list(session_id="sess_success")
+
+# Failed session
+failure_traces = sb.traces.list(session_id="sess_failure")
+
+# Find where they diverged
+for i, (s, f) in enumerate(zip(success_traces, failure_traces)):
+    if s.action != f.action:
+        print(f"Divergence at step {i}:")
+        print(f"  Success: {s.action} - {s.details.get('reasoning')}")
+        print(f"  Failure: {f.action} - {f.details.get('reasoning')}")
+        break
+```
+
+### Pattern 3: Regression Testing
+
+After fixing a bug, replay the original failure to confirm it's fixed:
+
+```python
+# Original failure
+original_session = "sess_bug_report_456"
+
+# Fork it
+test_session = sb.sessions.fork(
+    session_id=original_session,
+    version=0  # Start from the beginning
+)
+
+# Replay all turns with the fixed agent
+original_turns = sb.sessions.list_turns(session_id=original_session)
+
+for turn in original_turns:
+    response = your_fixed_agent(
+        session_id=test_session.id,
+        user_input=turn.input.content
+    )
+    
+    # Assert the fix worked
+    assert "error" not in response.lower()
+```
+
+---
+
+## Compliance & Audit Requirements
+
+For regulated industries (healthcare, finance), StateBase's audit trails provide **compliance-ready logs**:
+
+### HIPAA Compliance
+```python
+# Every access to patient data is traced
+trace = {
+    "action": "patient_data.accessed",
+    "actor": "nurse_jane_doe",
+    "patient_id": "patient_123",
+    "timestamp": "2024-03-15T10:23:45Z",
+    "reasoning": "Reviewing medication history for appointment"
+}
+```
+
+### SOC 2 Compliance
+```python
+# All state changes are immutable and auditable
+# - Who made the change (actor)
+# - When it was made (timestamp)
+# - Why it was made (reasoning)
+# - What was changed (state_diff)
+```
+
+### GDPR Right to Explanation
+```python
+# User asks: "Why did the agent recommend this?"
+# You can show them the exact reasoning:
+
+turn = sb.sessions.get_turn(turn_id="turn_789")
+print(f"Recommendation reasoning: {turn.reasoning}")
+# Output: "Based on your previous purchase of hiking boots, 
+#          we recommended waterproof jackets"
+```
+
+---
+
+## Performance Monitoring
+
+Use traces to measure agent performance:
+
+```python
+# Calculate average response time
+traces = sb.traces.list(session_id=session.id, action="turn.added")
+
+response_times = [
+    trace.details.get("metadata", {}).get("latency_ms", 0)
+    for trace in traces
+]
+
+avg_latency = sum(response_times) / len(response_times)
+print(f"Average response time: {avg_latency}ms")
+
+# Alert if latency is too high
+if avg_latency > 5000:  # 5 seconds
+    alert_team("Agent response time degraded")
+```
+
+### Common Metrics to Track
+
+| Metric | How to Calculate | Healthy Range |
+|--------|------------------|---------------|
+| **Avg Response Time** | `sum(latency_ms) / count(turns)` | < 2000ms |
+| **Rollback Rate** | `count(rollbacks) / count(sessions)` | < 2% |
+| **Tool Call Success Rate** | `successful_calls / total_calls` | > 95% |
+| **Session Completion Rate** | `completed / total_sessions` | > 80% |
+
+---
+
+## Instant Replay: The Killer Feature
+
+StateBase's **Instant Replay** lets you fork any session from any point in time **with one click** in the Dashboard:
+
+1. Open a session in the Dashboard
+2. Navigate to the "State History" tab
+3. Click **"Fork"** next to any state version
+4. A new session is created, starting from that exact state
+5. Test your fix in the forked session
+
+**Use cases**:
+- **Debug production issues** without touching live sessions
+- **A/B test prompts** on real user conversations
+- **Train new models** on historical data
+- **Reproduce edge cases** for regression testing
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Always include reasoning** in state updates and turns
+- **Log metadata** (tool calls, latency, model used) for analytics
+- **Use forking for debugging** (never modify production sessions)
+- **Set up alerts** on high rollback rates or slow response times
+- **Archive traces** for compliance (7 years for HIPAA)
+
+### ❌ Avoid This
+- **Don't skip turn logging** (you'll regret it when debugging)
+- **Don't log sensitive data** in reasoning fields (use metadata with encryption)
+- **Don't delete traces** (they're your audit trail)
+- **Don't ignore rollback patterns** (they indicate systemic issues)
+
+---
+
+## Dashboard Features
+
+The StateBase Dashboard provides visual tools for replay and audit:
+
+### Session Timeline
+- **Visual timeline** of all turns and state changes
+- **Hover to preview** state at any point
+- **Click to fork** from any version
+
+### Trace Explorer
+- **Filter by action type** (state updates, tool calls, rollbacks)
+- **Search by reasoning** (find all "API timeout" traces)
+- **Export to CSV** for external analysis
+
+### Performance Dashboard
+- **Real-time metrics** (latency, success rate, rollback rate)
+- **Alerts** for anomalies
+- **Historical trends** (compare this week vs last week)
+
+---
+
+## Next Steps
+
+- **[Failure Modes](/concepts/failure-modes)**: Learn common agent failure patterns
+- **[Debugging Demo](/demos/debugging-replay)**: Watch a real debugging session
+- **[Production Playbook](/playbook/incident-recovery)**: Incident response strategies
+
+---
+
+**Key Takeaway**: Replay and audit aren't just debugging tools—they're your **insurance policy** for production AI. When (not if) your agent fails, you'll have everything you need to understand why and fix it fast.

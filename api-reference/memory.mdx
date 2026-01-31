@@ -1,93 +1,545 @@
 ---
 title: "Memory API"
-description: "Semantic storage and retrieval"
+description: "Store and retrieve long-term knowledge with semantic search"
+api: "POST https://api.statebase.org/v1/memory"
 ---
 
-<Note>
-**Memories** are distinct from Session State. They are semantic facts stored in a Vector Database for retrieval across different sessions or long time horizons.
-</Note>
+# Memory API
 
-## Create Memory
+Memory enables your agents to **remember facts across sessions**. Unlike session state (which is ephemeral), memories are **permanent** and **searchable** via semantic similarity.
 
-Manually inject a memory into the graph. (Usually handled automatically by SNAP, but useful for initial knowledge seeding).
+---
 
-<ParamField body="session_id" type="string" required>
-  Associate with a session context.
-</ParamField>
+## Memory vs State
 
-<ParamField body="content" type="string" required>
-  The text content to store and embed.
-</ParamField>
+| Aspect | State | Memory |
+|--------|-------|--------|
+| **Scope** | Single session | Cross-session |
+| **Lifecycle** | Ephemeral (TTL) | Permanent |
+| **Structure** | Nested JSON | Flat text + embeddings |
+| **Access** | Direct read | Semantic search |
+| **Use Case** | Working memory | Long-term knowledge |
 
-<ParamField body="type" type="string" default="general">
-  Classification: `fact`, `preference`, `summary`, or `correction`.
-</ParamField>
+---
 
-<ParamField body="tags" type="array">
-  List of string tags for filtering.
-</ParamField>
+## Add Memory
 
-<ParamField body="embed" type="boolean" default="true">
-  If true, triggers the embedding generation pipeline immediately.
-</ParamField>
+`POST /v1/memory`
+
+Stores a new memory with optional vector embedding for semantic search.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session to associate memory with |
+| `content` | string | ✅ Yes | Memory text (max 10,000 chars) |
+| `type` | string | No | Memory classification: `"fact"`, `"preference"`, `"event"`, `"policy"` (default: `"general"`) |
+| `tags` | array | No | Tags for categorization (e.g., `["travel", "preferences"]`) |
+| `metadata` | object | No | Custom metadata |
+| `embed` | boolean | No | Generate vector embedding (default: `true`) |
+
+### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique memory ID (format: `mem_<12_chars>`) |
+| `session_id` | string | Associated session |
+| `content` | string | Memory text |
+| `type` | string | Memory type |
+| `tags` | array | Tags |
+| `metadata` | object | Custom metadata |
+| `created_at` | string | ISO 8601 timestamp |
+| `embedding_id` | string | Vector DB ID (if embedded) |
+| `vector_available` | boolean | Whether semantic search is enabled |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.statebase.org/v1/memories \
-  -H "Authorization: Bearer <token>" \
+curl -X POST https://api.statebase.org/v1/memory \
+  -H "X-API-Key: sb_your_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "session_id": "sess_123",
-    "content": "User prefers concise python code without type hints.",
+    "session_id": "sess_abc123",
+    "content": "User prefers concise responses without long explanations",
     "type": "preference",
-    "tags": ["coding", "style"]
+    "tags": ["communication_style", "user_preferences"],
+    "metadata": {
+      "confidence": 0.95,
+      "source": "explicit_user_statement"
+    }
   }'
+```
+
+```python Python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_your_key")
+
+memory = sb.memory.add(
+    session_id="sess_abc123",
+    content="User prefers concise responses without long explanations",
+    type="preference",
+    tags=["communication_style", "user_preferences"],
+    metadata={
+        "confidence": 0.95,
+        "source": "explicit_user_statement"
+    }
+)
+
+print(memory.id)  # mem_xyz789
+print(memory.vector_available)  # True
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/node';
+
+const sb = new StateBase({ apiKey: 'sb_your_key' });
+
+const memory = await sb.memory.add({
+  sessionId: 'sess_abc123',
+  content: 'User prefers concise responses without long explanations',
+  type: 'preference',
+  tags: ['communication_style', 'user_preferences'],
+  metadata: {
+    confidence: 0.95,
+    source: 'explicit_user_statement'
+  }
+});
+
+console.log(memory.id); // mem_xyz789
 ```
 
 ```json Response
 {
   "object": "memory",
-  "id": "mem_555...",
-  "content": "User prefers...",
-  "vector_available": true,
-  "embedding_id": "emb_777..."
+  "id": "mem_xyz789",
+  "session_id": "sess_abc123",
+  "created_at": "2026-01-31T04:30:00Z",
+  "content": "User prefers concise responses without long explanations",
+  "type": "preference",
+  "tags": ["communication_style", "user_preferences"],
+  "metadata": {
+    "confidence": 0.95,
+    "source": "explicit_user_statement"
+  },
+  "embedding_id": "vec_abc123",
+  "vector_available": true
 }
 ```
 </CodeGroup>
 
+---
+
 ## Search Memories
 
-Perform RAG (Retrieval Augmented Generation) on your agent's memory.
+`POST /v1/memory/search`
 
-<ParamField query="query" type="string" required>
-  The semantic search query.
-</ParamField>
+Performs **semantic similarity search** across all memories. Returns the most relevant memories based on vector similarity.
 
-<ParamField query="threshold" type="float" default="0.75">
-  Minimum cosine similarity score (0-1).
-</ParamField>
+### Request Body
 
-<ParamField query="top_k" type="integer" default="3">
-  Number of results to return.
-</ParamField>
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `query` | string | ✅ Yes | Search query (will be embedded and compared) |
+| `session_id` | string | No | Filter to specific session's memories |
+| `user_id` | string | No | Filter to specific user's memories |
+| `type` | string | No | Filter by memory type |
+| `tags` | array | No | Filter by tags (returns memories with ANY of these tags) |
+| `limit` | integer | No | Max results to return (default: 10, max: 50) |
+| `threshold` | float | No | Minimum similarity score (0.0-1.0, default: 0.7) |
+
+### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | array | Array of memory results |
+| `query` | string | Original search query |
+
+#### Memory Result Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Memory ID |
+| `session_id` | string | Associated session |
+| `content` | string | Memory text |
+| `type` | string | Memory type |
+| `tags` | array | Tags |
+| `score` | float | Similarity score (0.0-1.0, higher = more relevant) |
+| `created_at` | string | When memory was created |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl "https://api.statebase.org/v1/memories?query=python+style&threshold=0.8" \
-  -H "Authorization: Bearer <token>"
+curl -X POST https://api.statebase.org/v1/memory/search \
+  -H "X-API-Key: sb_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "How does the user like to communicate?",
+    "session_id": "sess_abc123",
+    "limit": 5,
+    "threshold": 0.7
+  }'
+```
+
+```python Python
+memories = sb.memory.search(
+    query="How does the user like to communicate?",
+    session_id="sess_abc123",
+    limit=5,
+    threshold=0.7
+)
+
+for mem in memories:
+    print(f"[{mem.score:.2f}] {mem.content}")
+    print(f"  Type: {mem.type}, Tags: {mem.tags}")
+```
+
+```typescript TypeScript
+const memories = await sb.memory.search({
+  query: 'How does the user like to communicate?',
+  sessionId: 'sess_abc123',
+  limit: 5,
+  threshold: 0.7
+});
+
+memories.forEach(mem => {
+  console.log(`[${mem.score.toFixed(2)}] ${mem.content}`);
+});
 ```
 
 ```json Response
 {
+  "object": "list",
+  "query": "How does the user like to communicate?",
   "data": [
     {
-      "id": "mem_555...",
-      "content": "User prefers concise python code...",
-      "score": 0.92,
-      "type": "preference"
+      "id": "mem_xyz789",
+      "session_id": "sess_abc123",
+      "content": "User prefers concise responses without long explanations",
+      "type": "preference",
+      "tags": ["communication_style"],
+      "score": 0.94,
+      "created_at": "2026-01-31T04:30:00Z"
+    },
+    {
+      "id": "mem_abc456",
+      "session_id": "sess_abc123",
+      "content": "User gets frustrated with verbose AI responses",
+      "type": "observation",
+      "tags": ["communication_style", "sentiment"],
+      "score": 0.87,
+      "created_at": "2026-01-30T10:15:00Z"
     }
-  ],
-  "query": "python style"
+  ]
 }
 ```
 </CodeGroup>
+
+---
+
+## Get Memory
+
+`GET /v1/memory/{memory_id}`
+
+Retrieves a specific memory by ID.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `memory_id` | string | ✅ Yes | Memory ID |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl https://api.statebase.org/v1/memory/mem_xyz789 \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+memory = sb.memory.get(memory_id="mem_xyz789")
+print(memory.content)
+print(memory.tags)
+```
+
+```typescript TypeScript
+const memory = await sb.memory.get('mem_xyz789');
+console.log(memory.content);
+```
+</CodeGroup>
+
+---
+
+## Update Memory
+
+`PATCH /v1/memory/{memory_id}`
+
+Updates an existing memory. If content is changed, a new embedding is generated.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `memory_id` | string | ✅ Yes | Memory ID to update |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `content` | string | No | New memory text |
+| `type` | string | No | New memory type |
+| `tags` | array | No | New tags (replaces existing) |
+| `metadata` | object | No | New metadata (merges with existing) |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.statebase.org/v1/memory/mem_xyz789 \
+  -H "X-API-Key: sb_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "User strongly prefers very concise, bullet-point responses",
+    "tags": ["communication_style", "high_priority"]
+  }'
+```
+
+```python Python
+updated_memory = sb.memory.update(
+    memory_id="mem_xyz789",
+    content="User strongly prefers very concise, bullet-point responses",
+    tags=["communication_style", "high_priority"]
+)
+```
+
+```typescript TypeScript
+const updated = await sb.memory.update('mem_xyz789', {
+  content: 'User strongly prefers very concise, bullet-point responses',
+  tags: ['communication_style', 'high_priority']
+});
+```
+</CodeGroup>
+
+---
+
+## Delete Memory
+
+`DELETE /v1/memory/{memory_id}`
+
+Permanently deletes a memory and its vector embedding.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `memory_id` | string | ✅ Yes | Memory ID to delete |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.statebase.org/v1/memory/mem_xyz789 \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+sb.memory.delete(memory_id="mem_xyz789")
+```
+
+```typescript TypeScript
+await sb.memory.delete('mem_xyz789');
+```
+</CodeGroup>
+
+---
+
+## List Memories
+
+`GET /v1/memory`
+
+Lists all memories with optional filtering.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | No | Filter by session |
+| `user_id` | string | No | Filter by user |
+| `type` | string | No | Filter by type |
+| `tags` | string | No | Comma-separated tags to filter by |
+| `limit` | integer | No | Max results (default: 20, max: 100) |
+| `starting_after` | string | No | Memory ID for pagination |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl "https://api.statebase.org/v1/memory?session_id=sess_abc123&type=preference&limit=10" \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+memories = sb.memory.list(
+    session_id="sess_abc123",
+    type="preference",
+    limit=10
+)
+
+for mem in memories:
+    print(f"{mem.type}: {mem.content}")
+```
+
+```typescript TypeScript
+const memories = await sb.memory.list({
+  sessionId: 'sess_abc123',
+  type: 'preference',
+  limit: 10
+});
+```
+</CodeGroup>
+
+---
+
+## Memory Types
+
+Use these standard types for consistency:
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `fact` | Objective information | `"User's company is Acme Corp"` |
+| `preference` | User preferences | `"User prefers dark mode"` |
+| `event` | Historical events | `"User completed onboarding on 2026-01-15"` |
+| `policy` | Rules and policies | `"Always ask for confirmation before deleting data"` |
+| `observation` | Behavioral insights | `"User tends to ask follow-up questions"` |
+| `general` | Uncategorized | Any other memory |
+
+---
+
+## Common Use Cases
+
+### 1. User Preferences
+
+```python
+# Store preference
+sb.memory.add(
+    session_id=session.id,
+    content="User prefers metric units (Celsius, kilometers)",
+    type="preference",
+    tags=["units", "localization"]
+)
+
+# Later, retrieve preferences
+prefs = sb.memory.search(
+    query="user measurement preferences",
+    session_id=session.id,
+    type="preference"
+)
+```
+
+### 2. Conversation Summaries
+
+```python
+# After long conversation, summarize and store
+summary = llm.summarize(conversation_history)
+
+sb.memory.add(
+    session_id=session.id,
+    content=summary,
+    type="event",
+    tags=["conversation_summary"],
+    metadata={"turn_count": len(conversation_history)}
+)
+```
+
+### 3. Knowledge Base
+
+```python
+# Store company policies
+sb.memory.add(
+    session_id=session.id,
+    content="Refund policy: 30 days for unopened items, 14 days for opened items",
+    type="policy",
+    tags=["refunds", "customer_service"]
+)
+
+# Search when needed
+policies = sb.memory.search(
+    query="refund policy",
+    type="policy",
+    limit=3
+)
+```
+
+### 4. User History
+
+```python
+# Track important events
+sb.memory.add(
+    session_id=session.id,
+    content="User successfully completed payment for $299.99 order",
+    type="event",
+    tags=["transaction", "payment"],
+    metadata={
+        "amount": 299.99,
+        "order_id": "ORD-12345",
+        "timestamp": datetime.now().isoformat()
+    }
+)
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Use semantic search** instead of keyword matching
+- **Tag memories** for easy filtering
+- **Set confidence scores** in metadata
+- **Consolidate similar memories** (avoid duplicates)
+- **Use specific memory types** (not just "general")
+
+### ❌ Avoid This
+- **Don't store temporary data** (use session state instead)
+- **Don't store sensitive data unencrypted** (use metadata encryption)
+- **Don't create too many memories** (focus on high-signal information)
+- **Don't forget to clean up** (delete outdated memories)
+
+---
+
+## Embeddings
+
+StateBase automatically generates vector embeddings using:
+- **Default**: Google Gemini (`text-embedding-004`)
+- **Alternative**: OpenAI (`text-embedding-3-small`)
+
+Configure in your [Dashboard → Settings](https://app.statebase.org/settings).
+
+**Embedding dimension**: 1536 (compatible with most vector DBs)
+
+---
+
+## Error Responses
+
+| Status Code | Error Code | Description |
+|-------------|------------|-------------|
+| 400 | `invalid_request` | Missing or invalid fields |
+| 404 | `memory_not_found` | Memory doesn't exist |
+| 404 | `session_not_found` | Session doesn't exist |
+| 413 | `content_too_large` | Content exceeds 10,000 chars |
+| 429 | `rate_limit_exceeded` | Too many requests |
+
+---
+
+## Next Steps
+
+- **[Sessions API](/api-reference/sessions)**: Manage session lifecycle
+- **[Turns API](/api-reference/turns)**: Log conversations
+- **[RAG Agents Pattern](/patterns/rag-agents)**: Build retrieval-augmented agents
+
+---
+
+**Key Takeaway**: Memory is how your agent **learns over time**. Use it for facts that should persist across sessions.

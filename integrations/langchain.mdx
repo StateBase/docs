@@ -1,0 +1,456 @@
+---
+title: "LangChain Integration"
+description: "Use StateBase as the memory layer for LangChain agents"
+---
+
+# LangChain Integration
+
+StateBase integrates seamlessly with LangChain to provide **production-grade memory** and **state management** for your LangChain agents.
+
+---
+
+## Why StateBase + LangChain?
+
+LangChain's built-in memory (e.g., `ConversationBufferMemory`) is **ephemeral** and **not production-ready**:
+
+| Feature | LangChain Memory | StateBase |
+|---------|------------------|-----------|
+| **Persistence** | In-memory only | PostgreSQL + Redis |
+| **Rollback** | ❌ Not supported | ✅ Time-travel to any turn |
+| **Audit Trail** | ❌ No logging | ✅ Complete trace history |
+| **Multi-Session** | ❌ Separate instances | ✅ Unified memory across sessions |
+| **Semantic Search** | ❌ Basic retrieval | ✅ Vector-based memory search |
+
+---
+
+## Installation
+
+```bash
+pip install langchain statebase
+```
+
+---
+
+## Basic Integration
+
+Replace LangChain's memory with StateBase:
+
+```python
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import HumanMessage, AIMessage
+from statebase import StateBase
+
+# Initialize StateBase
+sb = StateBase(api_key="your-key")
+
+# Create session
+session = sb.sessions.create(
+    agent_id="langchain-agent",
+    user_id="user_123"
+)
+
+# Initialize LangChain LLM
+llm = ChatOpenAI(model="gpt-4")
+
+def chat(user_message):
+    # 1. Get conversation history from StateBase
+    context = sb.sessions.get_context(
+        session_id=session.id,
+        turn_limit=10
+    )
+    
+    # 2. Convert to LangChain message format
+    messages = []
+    for turn in context["recent_turns"]:
+        messages.append(HumanMessage(content=turn["input"]["content"]))
+        messages.append(AIMessage(content=turn["output"]["content"]))
+    
+    # 3. Add current message
+    messages.append(HumanMessage(content=user_message))
+    
+    # 4. Generate response
+    response = llm(messages)
+    
+    # 5. Log turn in StateBase
+    sb.sessions.add_turn(
+        session_id=session.id,
+        input=user_message,
+        output=response.content
+    )
+    
+    return response.content
+
+# Usage
+print(chat("What's the capital of France?"))
+# "The capital of France is Paris."
+
+print(chat("What's the population?"))
+# "Paris has a population of approximately 2.2 million people."
+# ✅ StateBase remembers "it" refers to Paris
+```
+
+---
+
+## Custom Memory Class
+
+Create a LangChain-compatible memory class:
+
+```python
+from langchain.memory import BaseChatMemory
+from langchain.schema import BaseMessage, HumanMessage, AIMessage
+from statebase import StateBase
+
+class StateBaseMemory(BaseChatMemory):
+    """LangChain memory backed by StateBase"""
+    
+    session_id: str
+    sb: StateBase
+    turn_limit: int = 10
+    
+    def __init__(self, session_id: str, api_key: str, turn_limit: int = 10):
+        super().__init__()
+        self.session_id = session_id
+        self.sb = StateBase(api_key=api_key)
+        self.turn_limit = turn_limit
+    
+    @property
+    def memory_variables(self):
+        return ["history"]
+    
+    def load_memory_variables(self, inputs):
+        """Load conversation history from StateBase"""
+        context = self.sb.sessions.get_context(
+            session_id=self.session_id,
+            turn_limit=self.turn_limit
+        )
+        
+        # Convert to LangChain messages
+        messages = []
+        for turn in context["recent_turns"]:
+            messages.append(HumanMessage(content=turn["input"]["content"]))
+            messages.append(AIMessage(content=turn["output"]["content"]))
+        
+        return {"history": messages}
+    
+    def save_context(self, inputs, outputs):
+        """Save conversation turn to StateBase"""
+        self.sb.sessions.add_turn(
+            session_id=self.session_id,
+            input=inputs.get("input", ""),
+            output=outputs.get("output", "")
+        )
+    
+    def clear(self):
+        """Clear memory (not recommended with StateBase)"""
+        # StateBase keeps history for audit - don't actually delete
+        pass
+
+# Usage with LangChain chains
+from langchain.chains import ConversationChain
+
+memory = StateBaseMemory(
+    session_id=session.id,
+    api_key="your-key"
+)
+
+chain = ConversationChain(
+    llm=ChatOpenAI(),
+    memory=memory
+)
+
+response = chain.run("What's the weather in SF?")
+```
+
+---
+
+## With LangChain Agents
+
+Use StateBase with LangChain's agent framework:
+
+```python
+from langchain.agents import initialize_agent, Tool
+from langchain.agents import AgentType
+from langchain.chat_models import ChatOpenAI
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+# Define tools
+tools = [
+    Tool(
+        name="Calculator",
+        func=lambda x: eval(x),
+        description="Useful for math calculations"
+    ),
+    Tool(
+        name="Weather",
+        func=lambda x: f"The weather in {x} is sunny",
+        description="Get weather for a city"
+    )
+]
+
+# Create session
+session = sb.sessions.create(agent_id="langchain-tool-agent")
+
+# Initialize agent
+agent = initialize_agent(
+    tools=tools,
+    llm=ChatOpenAI(model="gpt-4"),
+    agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+    memory=StateBaseMemory(session_id=session.id, api_key="your-key"),
+    verbose=True
+)
+
+# Run agent
+response = agent.run("What's 25 * 4?")
+print(response)
+
+# Check StateBase for full trace
+turns = sb.sessions.list_turns(session_id=session.id)
+for turn in turns:
+    print(f"Input: {turn.input}")
+    print(f"Output: {turn.output}")
+    print(f"Metadata: {turn.metadata}")
+```
+
+---
+
+## Checkpointing Tool Calls
+
+Checkpoint before expensive tool calls:
+
+```python
+from langchain.tools import BaseTool
+
+class StateBaseCheckpointTool(BaseTool):
+    """Tool wrapper that checkpoints before execution"""
+    
+    name: str
+    description: str
+    func: callable
+    session_id: str
+    sb: StateBase
+    
+    def _run(self, query: str) -> str:
+        # Checkpoint before tool call
+        self.sb.sessions.update_state(
+            session_id=self.session_id,
+            state={"pending_tool": self.name, "tool_input": query},
+            reasoning=f"About to call {self.name}"
+        )
+        
+        try:
+            # Execute tool
+            result = self.func(query)
+            
+            # Checkpoint after success
+            self.sb.sessions.update_state(
+                session_id=self.session_id,
+                state={"last_tool_result": result},
+                reasoning=f"Tool {self.name} succeeded"
+            )
+            
+            return result
+            
+        except Exception as e:
+            # Roll back on failure
+            self.sb.sessions.rollback(session_id=self.session_id, version=-1)
+            raise
+
+# Usage
+weather_tool = StateBaseCheckpointTool(
+    name="Weather",
+    description="Get weather for a city",
+    func=get_weather_api,
+    session_id=session.id,
+    sb=sb
+)
+```
+
+---
+
+## Semantic Memory with LangChain
+
+Combine LangChain's retrieval with StateBase's memory:
+
+```python
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+session = sb.sessions.create(agent_id="rag-agent")
+
+# LangChain vector store for documents
+vectorstore = Chroma(
+    embedding_function=OpenAIEmbeddings(),
+    persist_directory="./chroma_db"
+)
+
+def rag_with_statebase(question):
+    # 1. Get user's long-term memories from StateBase
+    user_memories = sb.memory.search(
+        query=question,
+        session_id=session.id,
+        limit=3
+    )
+    
+    # 2. Get relevant documents from LangChain vectorstore
+    docs = vectorstore.similarity_search(question, k=3)
+    
+    # 3. Combine both contexts
+    context = {
+        "user_memories": [m.content for m in user_memories],
+        "documents": [doc.page_content for doc in docs]
+    }
+    
+    # 4. Generate answer
+    response = llm.generate(
+        prompt=f"""
+        User memories: {context['user_memories']}
+        Documents: {context['documents']}
+        Question: {question}
+        
+        Answer based on both user memories and documents.
+        """
+    )
+    
+    # 5. Log in StateBase
+    sb.sessions.add_turn(
+        session_id=session.id,
+        input=question,
+        output=response,
+        metadata={
+            "retrieved_docs": len(docs),
+            "retrieved_memories": len(user_memories)
+        }
+    )
+    
+    return response
+```
+
+---
+
+## Migration from LangChain Memory
+
+Migrate existing LangChain memory to StateBase:
+
+```python
+from langchain.memory import ConversationBufferMemory
+
+# Old LangChain memory
+old_memory = ConversationBufferMemory()
+old_memory.save_context(
+    {"input": "Hi"},
+    {"output": "Hello!"}
+)
+
+# Migrate to StateBase
+sb = StateBase(api_key="your-key")
+session = sb.sessions.create(agent_id="migrated-agent")
+
+# Extract messages from LangChain memory
+messages = old_memory.chat_memory.messages
+
+# Import into StateBase
+for i in range(0, len(messages), 2):
+    if i + 1 < len(messages):
+        sb.sessions.add_turn(
+            session_id=session.id,
+            input=messages[i].content,
+            output=messages[i+1].content
+        )
+
+print(f"Migrated {len(messages)//2} turns to StateBase")
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Use StateBase for production** (LangChain memory is for prototyping)
+- **Checkpoint before tool calls** (enables retry without re-execution)
+- **Store user preferences in StateBase memory** (cross-session persistence)
+- **Log all agent actions** (full audit trail)
+
+### ❌ Avoid This
+- **Don't use ConversationBufferMemory in production** (data loss risk)
+- **Don't mix memory backends** (pick StateBase or LangChain, not both)
+- **Don't skip turn logging** (you'll need it for debugging)
+
+---
+
+## Complete Example
+
+```python
+from langchain.agents import initialize_agent, Tool, AgentType
+from langchain.chat_models import ChatOpenAI
+from statebase import StateBase
+
+# Initialize StateBase
+sb = StateBase(api_key="your-key")
+session = sb.sessions.create(
+    agent_id="production-langchain-agent",
+    user_id="user_123"
+)
+
+# Define tools with checkpointing
+def weather_with_checkpoint(city):
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"pending_tool": "weather", "city": city},
+        reasoning="Calling weather API"
+    )
+    
+    try:
+        result = get_weather(city)
+        sb.sessions.update_state(
+            session_id=session.id,
+            state={"last_weather": result},
+            reasoning="Weather API succeeded"
+        )
+        return result
+    except Exception as e:
+        sb.sessions.rollback(session_id=session.id, version=-1)
+        return f"Weather unavailable: {e}"
+
+tools = [
+    Tool(
+        name="Weather",
+        func=weather_with_checkpoint,
+        description="Get current weather for a city"
+    )
+]
+
+# Create agent with StateBase memory
+agent = initialize_agent(
+    tools=tools,
+    llm=ChatOpenAI(model="gpt-4"),
+    agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+    memory=StateBaseMemory(session_id=session.id, api_key="your-key"),
+    verbose=True
+)
+
+# Run agent
+response = agent.run("What's the weather in Paris?")
+print(response)
+
+# Later: Analyze agent behavior
+turns = sb.sessions.list_turns(session_id=session.id)
+for turn in turns:
+    print(f"Tool used: {turn.metadata.get('tool_name')}")
+    print(f"Success: {turn.metadata.get('success')}")
+```
+
+---
+
+## Next Steps
+
+- **[LangGraph Integration](/integrations/langgraph)**: Use StateBase with LangGraph
+- **[Tool Calling Pattern](/patterns/tool-calling)**: Advanced tool usage
+- **[Migration Guide](/migration/langchain)**: Detailed migration steps
+
+---
+
+**Key Takeaway**: LangChain is great for prototyping. StateBase makes it production-ready.

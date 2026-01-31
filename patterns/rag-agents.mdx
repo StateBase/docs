@@ -1,0 +1,525 @@
+---
+title: "RAG Agents Pattern"
+description: "Build retrieval-augmented generation agents with StateBase for accurate, context-aware responses"
+---
+
+# RAG Agents Pattern
+
+**Retrieval-Augmented Generation (RAG)** is the pattern of combining LLMs with external knowledge sources. StateBase makes RAG agents **stateful** and **reliable** by managing both conversation context and retrieved knowledge.
+
+---
+
+## The Problem with Stateless RAG
+
+Traditional RAG implementations lose context between requests:
+
+```python
+# ❌ Stateless RAG (every request is independent)
+def answer_question(question):
+    # 1. Retrieve relevant docs
+    docs = vector_db.search(question, limit=5)
+    
+    # 2. Generate answer
+    answer = llm.generate(
+        prompt=f"Context: {docs}\nQuestion: {question}"
+    )
+    
+    return answer
+
+# User: "What's our refund policy?"
+# Agent: [retrieves policy docs, answers correctly]
+
+# User: "How long does it take?" (refers to refunds)
+# Agent: [doesn't know what "it" refers to, retrieves wrong docs]
+```
+
+**The issue**: The agent doesn't remember what "it" refers to.
+
+---
+
+## Stateful RAG with StateBase
+
+StateBase tracks conversation history and retrieved documents:
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+def stateful_rag_agent(session_id, question):
+    # 1. Get conversation context
+    context = sb.sessions.get_context(
+        session_id=session_id,
+        query=question,
+        memory_limit=5,
+        turn_limit=10
+    )
+    
+    # 2. Expand question with context
+    expanded_question = expand_with_context(question, context)
+    # "How long does it take?" → "How long does the refund process take?"
+    
+    # 3. Retrieve relevant docs
+    docs = vector_db.search(expanded_question, limit=5)
+    
+    # 4. Store retrieved docs in state
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={
+            **context["state"],
+            "last_retrieved_docs": [doc.id for doc in docs],
+            "last_query": expanded_question
+        },
+        reasoning=f"Retrieved {len(docs)} docs for: {expanded_question}"
+    )
+    
+    # 5. Generate answer with full context
+    answer = llm.generate(
+        prompt=f"""
+        Conversation history: {context['recent_turns']}
+        Retrieved documents: {docs}
+        User question: {question}
+        
+        Provide a helpful answer based on the documents.
+        """
+    )
+    
+    # 6. Log the turn
+    sb.sessions.add_turn(
+        session_id=session_id,
+        input=question,
+        output=answer,
+        metadata={
+            "retrieved_doc_ids": [doc.id for doc in docs],
+            "expanded_query": expanded_question
+        },
+        reasoning="RAG response generated"
+    )
+    
+    return answer
+```
+
+---
+
+## Query Expansion
+
+Use conversation history to improve retrieval:
+
+```python
+def expand_with_context(question, context):
+    """Rewrite question to be self-contained"""
+    
+    recent_turns = context.get("recent_turns", [])
+    
+    if not recent_turns:
+        return question  # First question, no context needed
+    
+    # Use LLM to expand the question
+    expansion_prompt = f"""
+    Conversation history:
+    {format_turns(recent_turns)}
+    
+    Current question: {question}
+    
+    Rewrite the question to be self-contained (resolve pronouns like "it", "that", "this").
+    Only output the rewritten question, nothing else.
+    """
+    
+    expanded = llm.generate(expansion_prompt)
+    return expanded
+
+# Example:
+# History: "What's your refund policy?" → "We offer 30-day refunds"
+# Question: "How long does it take?"
+# Expanded: "How long does the refund process take?"
+```
+
+---
+
+## Document Caching
+
+Avoid re-retrieving the same documents:
+
+```python
+def retrieve_with_cache(session_id, query):
+    state = sb.sessions.get(session_id).state
+    
+    # Check if we recently retrieved docs for similar query
+    if "last_query" in state:
+        # Calculate similarity between queries
+        similarity = calculate_similarity(query, state["last_query"])
+        
+        if similarity > 0.9:  # Very similar query
+            # Reuse cached docs
+            cached_doc_ids = state.get("last_retrieved_docs", [])
+            docs = [get_doc_by_id(doc_id) for doc_id in cached_doc_ids]
+            return docs
+    
+    # Cache miss - retrieve fresh docs
+    docs = vector_db.search(query, limit=5)
+    
+    # Cache for future use
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={
+            **state,
+            "last_retrieved_docs": [doc.id for doc in docs],
+            "last_query": query
+        },
+        reasoning="Cached retrieved documents"
+    )
+    
+    return docs
+```
+
+---
+
+## Hybrid Search
+
+Combine vector search with keyword search for better retrieval:
+
+```python
+def hybrid_search(query, limit=5):
+    # 1. Vector search (semantic similarity)
+    vector_results = vector_db.search(query, limit=limit*2)
+    
+    # 2. Keyword search (exact matches)
+    keyword_results = keyword_index.search(query, limit=limit*2)
+    
+    # 3. Merge and re-rank
+    all_results = vector_results + keyword_results
+    
+    # Re-rank using a scoring function
+    scored_results = [
+        {
+            "doc": doc,
+            "score": (
+                0.7 * doc.vector_score +  # Semantic relevance
+                0.3 * doc.keyword_score   # Exact match bonus
+            )
+        }
+        for doc in all_results
+    ]
+    
+    # Sort by score and deduplicate
+    sorted_results = sorted(scored_results, key=lambda x: x["score"], reverse=True)
+    unique_docs = []
+    seen_ids = set()
+    
+    for result in sorted_results:
+        if result["doc"].id not in seen_ids:
+            unique_docs.append(result["doc"])
+            seen_ids.add(result["doc"].id)
+        
+        if len(unique_docs) >= limit:
+            break
+    
+    return unique_docs
+```
+
+---
+
+## Citation Tracking
+
+Track which documents were used to generate each answer:
+
+```python
+def generate_with_citations(session_id, question, docs):
+    # Generate answer
+    answer = llm.generate(
+        prompt=f"""
+        Documents:
+        {format_docs_with_ids(docs)}
+        
+        Question: {question}
+        
+        Answer the question using the documents.
+        For each fact, cite the document ID in [brackets].
+        
+        Example: "Our refund policy is 30 days [doc_123]."
+        """
+    )
+    
+    # Extract citations from answer
+    citations = extract_citations(answer)
+    
+    # Store in turn metadata
+    sb.sessions.add_turn(
+        session_id=session_id,
+        input=question,
+        output=answer,
+        metadata={
+            "retrieved_docs": [doc.id for doc in docs],
+            "citations": citations,
+            "citation_count": len(citations)
+        },
+        reasoning=f"Generated answer with {len(citations)} citations"
+    )
+    
+    return answer
+
+def extract_citations(text):
+    """Extract [doc_123] style citations"""
+    import re
+    return re.findall(r'\[doc_\w+\]', text)
+```
+
+---
+
+## Multi-Hop Retrieval
+
+For complex questions, retrieve in multiple steps:
+
+```python
+def multi_hop_rag(session_id, question):
+    # Step 1: Initial retrieval
+    docs_1 = vector_db.search(question, limit=3)
+    
+    # Step 2: Analyze docs and generate follow-up queries
+    follow_up_queries = llm.generate(
+        prompt=f"""
+        Question: {question}
+        Initial docs: {docs_1}
+        
+        What additional information do we need to fully answer this question?
+        Generate 2-3 follow-up search queries.
+        """
+    )
+    
+    # Step 3: Retrieve for each follow-up query
+    all_docs = docs_1
+    for query in follow_up_queries:
+        docs = vector_db.search(query, limit=2)
+        all_docs.extend(docs)
+    
+    # Step 4: Deduplicate and generate final answer
+    unique_docs = deduplicate_docs(all_docs)
+    
+    answer = llm.generate(
+        prompt=f"""
+        Question: {question}
+        All retrieved documents: {unique_docs}
+        
+        Provide a comprehensive answer.
+        """
+    )
+    
+    # Track multi-hop retrieval in state
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={
+            "multi_hop_queries": follow_up_queries,
+            "total_docs_retrieved": len(unique_docs)
+        },
+        reasoning="Multi-hop retrieval completed"
+    )
+    
+    return answer
+```
+
+---
+
+## Confidence Scoring
+
+Detect when the agent doesn't have enough information:
+
+```python
+def answer_with_confidence(session_id, question, docs):
+    # Generate answer with confidence score
+    response = llm.generate(
+        prompt=f"""
+        Documents: {docs}
+        Question: {question}
+        
+        Provide:
+        1. Your answer
+        2. Confidence score (0-100) based on document relevance
+        3. Reasoning for the confidence score
+        
+        Format:
+        ANSWER: [your answer]
+        CONFIDENCE: [0-100]
+        REASONING: [why this confidence level]
+        """
+    )
+    
+    # Parse response
+    answer = extract_field(response, "ANSWER")
+    confidence = int(extract_field(response, "CONFIDENCE"))
+    reasoning = extract_field(response, "REASONING")
+    
+    # If confidence is low, escalate or retrieve more docs
+    if confidence < 70:
+        # Try retrieving more docs
+        additional_docs = vector_db.search(question, limit=10)
+        
+        # Retry with more context
+        return answer_with_confidence(session_id, question, additional_docs)
+    
+    # Log confidence in metadata
+    sb.sessions.add_turn(
+        session_id=session_id,
+        input=question,
+        output=answer,
+        metadata={
+            "confidence": confidence,
+            "confidence_reasoning": reasoning,
+            "doc_count": len(docs)
+        },
+        reasoning=f"Answer generated with {confidence}% confidence"
+    )
+    
+    return answer
+```
+
+---
+
+## Conversation Summarization
+
+Periodically summarize long conversations to keep context manageable:
+
+```python
+def summarize_if_needed(session_id):
+    turns = sb.sessions.list_turns(session_id=session_id)
+    
+    if len(turns) > 20:  # Time to summarize
+        # Generate summary
+        summary = llm.generate(
+            prompt=f"""
+            Summarize this conversation in 3-5 bullet points:
+            {format_turns(turns)}
+            """
+        )
+        
+        # Store summary in memory
+        sb.memory.add(
+            content=summary,
+            type="conversation_summary",
+            session_id=session_id,
+            metadata={"turn_count": len(turns)}
+        )
+        
+        # Update state to indicate summarization
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={"last_summarized_at_turn": len(turns)},
+            reasoning="Conversation summarized"
+        )
+```
+
+---
+
+## Complete RAG Agent Example
+
+```python
+from statebase import StateBase
+import chromadb
+
+sb = StateBase(api_key="your-key")
+vector_db = chromadb.Client()
+
+class RAGAgent:
+    def __init__(self, session_id):
+        self.session_id = session_id
+    
+    def answer(self, question):
+        # 1. Get context
+        context = sb.sessions.get_context(
+            session_id=self.session_id,
+            query=question,
+            memory_limit=5,
+            turn_limit=10
+        )
+        
+        # 2. Expand query with context
+        expanded_query = self.expand_query(question, context)
+        
+        # 3. Retrieve documents
+        docs = self.retrieve_docs(expanded_query)
+        
+        # 4. Generate answer
+        answer = self.generate_answer(question, docs, context)
+        
+        # 5. Log turn
+        sb.sessions.add_turn(
+            session_id=self.session_id,
+            input=question,
+            output=answer,
+            metadata={
+                "retrieved_docs": [doc["id"] for doc in docs],
+                "expanded_query": expanded_query
+            }
+        )
+        
+        return answer
+    
+    def expand_query(self, question, context):
+        if not context.get("recent_turns"):
+            return question
+        
+        # Use LLM to expand
+        expansion = llm.generate(
+            prompt=f"""
+            History: {context['recent_turns']}
+            Question: {question}
+            
+            Rewrite to be self-contained:
+            """
+        )
+        return expansion
+    
+    def retrieve_docs(self, query):
+        # Hybrid search
+        vector_results = vector_db.query(query, n_results=5)
+        return vector_results
+    
+    def generate_answer(self, question, docs, context):
+        answer = llm.generate(
+            prompt=f"""
+            Conversation: {context['recent_turns']}
+            Documents: {docs}
+            Question: {question}
+            
+            Answer based on documents. Cite sources.
+            """
+        )
+        return answer
+
+# Usage
+agent = RAGAgent(session_id="sess_123")
+
+answer1 = agent.answer("What's your refund policy?")
+# Agent retrieves policy docs, answers
+
+answer2 = agent.answer("How long does it take?")
+# Agent knows "it" = refund, retrieves correct docs
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Expand queries with conversation context** (resolve pronouns)
+- **Cache retrieved documents** (avoid redundant searches)
+- **Track citations** (know which docs were used)
+- **Use hybrid search** (vector + keyword)
+- **Monitor confidence scores** (detect when you don't know)
+
+### ❌ Avoid This
+- **Don't ignore conversation history** (leads to irrelevant retrieval)
+- **Don't retrieve too many docs** (context overflow)
+- **Don't trust retrieval blindly** (validate relevance)
+- **Don't forget to cite sources** (transparency matters)
+
+---
+
+## Next Steps
+
+- **[Tool Calling Pattern](/patterns/tool-calling)**: Combine RAG with tools
+- **[Long-Running Agents](/patterns/long-running)**: Handle multi-session RAG
+- **[Memory Management](/concepts/memory)**: Deep dive into StateBase memory
+
+---
+
+**Key Takeaway**: RAG without state is like having a librarian with amnesia. StateBase makes your RAG agents remember context and improve over time.

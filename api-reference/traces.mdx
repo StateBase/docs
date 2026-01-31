@@ -1,42 +1,162 @@
 ---
 title: "Traces API"
-description: "Audit logging and decision tracking"
+description: "Audit trail and debugging for all agent operations"
+api: "GET https://api.statebase.org/v1/traces"
 ---
 
-<Note>
-**Traces** are immutable logs of every decision, state change, or API call made within the system. They are crucial for compliance, debugging, and "Explainable AI".
-</Note>
+# Traces API
+
+Traces provide a **complete audit trail** of every operation in StateBase. Use traces for debugging, compliance, analytics, and understanding agent behavior.
+
+---
+
+## What Gets Traced?
+
+Every API operation creates a trace:
+
+| Operation | Trace Action | Information Logged |
+|-----------|--------------|-------------------|
+| Create session | `session.created` | `agent_id`, `user_id`, `initial_state` |
+| Update state | `state.updated` | `reasoning`, `state_diff`, `version` |
+| Add turn | `turn.added` | `input`, `output`, `reasoning`, `metadata` |
+| Add memory | `memory.created` | `content`, `type`, `tags` |
+| Rollback | `state.rolled_back` | `from_version`, `to_version`, `reason` |
+| Fork session | `session.forked` | `source_session`, `fork_version` |
+| Delete session | `session.deleted` | `session_id`, `reason` |
+
+---
 
 ## List Traces
 
-<ParamField query="session_id" type="string">
-  Filter traces by session.
-</ParamField>
+`GET /v1/traces`
 
-<ParamField query="action" type="string">
-  Filter by action type (e.g. `state.update`, `memory.create`, `turn.add`).
-</ParamField>
+Lists all traces with optional filtering.
 
-<ParamField query="resource_type" type="string">
-  Filter by affected resource (`session`, `memory`, `turn`).
-</ParamField>
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | No | Filter by session |
+| `user_id` | string | No | Filter by user |
+| `action` | string | No | Filter by action type (e.g., `"state.updated"`) |
+| `created_after` | string | No | ISO 8601 timestamp (only traces after this time) |
+| `created_before` | string | No | ISO 8601 timestamp (only traces before this time) |
+| `limit` | integer | No | Max results (default: 20, max: 100) |
+| `starting_after` | string | No | Trace ID for pagination |
+
+### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | array | Array of trace objects |
+| `has_more` | boolean | Whether more results exist |
+
+#### Trace Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique trace ID |
+| `session_id` | string | Associated session (if applicable) |
+| `user_id` | string | Associated user (if applicable) |
+| `action` | string | Action type (e.g., `"state.updated"`) |
+| `actor` | string | Who performed the action (API key prefix) |
+| `timestamp` | string | ISO 8601 timestamp |
+| `details` | object | Action-specific details |
+| `metadata` | object | Custom metadata |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl "https://api.statebase.org/v1/traces?session_id=sess_123&action=state.update" \
-  -H "Authorization: Bearer <token>"
+curl "https://api.statebase.org/v1/traces?session_id=sess_abc123&limit=10" \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_your_key")
+
+traces = sb.traces.list(
+    session_id="sess_abc123",
+    limit=10
+)
+
+for trace in traces:
+    print(f"{trace.timestamp}: {trace.action}")
+    print(f"  Actor: {trace.actor}")
+    print(f"  Details: {trace.details}")
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/node';
+
+const sb = new StateBase({ apiKey: 'sb_your_key' });
+
+const traces = await sb.traces.list({
+  sessionId: 'sess_abc123',
+  limit: 10
+});
+
+traces.forEach(trace => {
+  console.log(`${trace.timestamp}: ${trace.action}`);
+  console.log(`  Details: ${JSON.stringify(trace.details)}`);
+});
 ```
 
 ```json Response
 {
+  "object": "list",
   "data": [
     {
-      "id": "trace_999...",
-      "timestamp": "2026-01-27T10:06:00Z",
-      "action": "state.update",
-      "actor": "system",
-      "resource_type": "session",
-      "resource_id": "sess_123"
+      "id": "trace_xyz789",
+      "session_id": "sess_abc123",
+      "user_id": "user_123",
+      "action": "state.updated",
+      "actor": "api_key_sb_abc123",
+      "timestamp": "2026-01-31T04:45:00Z",
+      "details": {
+        "reasoning": "User provided destination for trip",
+        "state_diff": {
+          "added": {"destination": "Paris"},
+          "removed": {},
+          "modified": {}
+        },
+        "version": 3
+      },
+      "metadata": {
+        "request_id": "req_abc123",
+        "latency_ms": 45
+      }
+    },
+    {
+      "id": "trace_abc456",
+      "session_id": "sess_abc123",
+      "action": "turn.added",
+      "actor": "api_key_sb_abc123",
+      "timestamp": "2026-01-31T04:44:30Z",
+      "details": {
+        "turn_number": 5,
+        "input_type": "text",
+        "output_type": "text",
+        "reasoning": "Called weather API for Paris"
+      },
+      "metadata": {
+        "tool_used": "weather_api",
+        "latency_ms": 450
+      }
+    },
+    {
+      "id": "trace_def789",
+      "session_id": "sess_abc123",
+      "action": "state.rolled_back",
+      "actor": "api_key_sb_abc123",
+      "timestamp": "2026-01-31T04:40:00Z",
+      "details": {
+        "from_version": 5,
+        "to_version": 3,
+        "reason": "Agent corrupted state, reverting to safe checkpoint"
+      }
     }
   ],
   "has_more": false
@@ -44,34 +164,276 @@ curl "https://api.statebase.org/v1/traces?session_id=sess_123&action=state.updat
 ```
 </CodeGroup>
 
-## Get Trace Details
+---
 
-Retrieves the full context (IP address, user agent, exact diff) of a specific trace.
+## Get Trace
 
-<ParamField path="trace_id" type="string" required>
-  The ID of the trace.
-</ParamField>
+`GET /v1/traces/{trace_id}`
+
+Retrieves a specific trace by ID.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `trace_id` | string | ✅ Yes | Trace ID |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl https://api.statebase.org/v1/traces/trace_999... \
-  -H "Authorization: Bearer <token>"
+curl https://api.statebase.org/v1/traces/trace_xyz789 \
+  -H "X-API-Key: sb_your_key"
 ```
 
-```json Response
-{
-  "id": "trace_999...",
-  "action": "state.update",
-  "details": {
-    "prev_value": "draft",
-    "new_value": "published",
-    "field": "status"
-  },
-  "context": {
-    "request_id": "req_123...",
-    "api_key_id": "key_456..."
-  },
-  "ip_address": "10.0.0.1"
-}
+```python Python
+trace = sb.traces.get(trace_id="trace_xyz789")
+print(trace.action)
+print(trace.details)
+```
+
+```typescript TypeScript
+const trace = await sb.traces.get('trace_xyz789');
+console.log(trace.action);
 ```
 </CodeGroup>
+
+---
+
+## Trace Actions Reference
+
+### Session Actions
+
+| Action | Description | Details Fields |
+|--------|-------------|----------------|
+| `session.created` | New session created | `agent_id`, `user_id`, `initial_state` |
+| `session.updated` | Session metadata updated | `metadata_diff`, `ttl_seconds` |
+| `session.deleted` | Session deleted | `reason`, `turn_count`, `memory_count` |
+| `session.forked` | Session forked | `source_session_id`, `fork_version` |
+| `session.expired` | Session TTL expired | `ttl_seconds`, `last_activity` |
+
+### State Actions
+
+| Action | Description | Details Fields |
+|--------|-------------|----------------|
+| `state.updated` | State changed | `reasoning`, `state_diff`, `version` |
+| `state.rolled_back` | State reverted | `from_version`, `to_version`, `reason` |
+
+### Turn Actions
+
+| Action | Description | Details Fields |
+|--------|-------------|----------------|
+| `turn.added` | Conversation turn logged | `turn_number`, `input_type`, `output_type`, `reasoning` |
+
+### Memory Actions
+
+| Action | Description | Details Fields |
+|--------|-------------|----------------|
+| `memory.created` | Memory added | `content_preview`, `type`, `tags`, `embedded` |
+| `memory.updated` | Memory modified | `content_changed`, `tags_changed` |
+| `memory.deleted` | Memory removed | `content_preview`, `reason` |
+
+---
+
+## Common Use Cases
+
+### 1. Debugging Production Issues
+
+```python
+# Find all traces for a failed session
+traces = sb.traces.list(
+    session_id="sess_failed_123",
+    limit=100
+)
+
+# Look for errors or rollbacks
+for trace in traces:
+    if trace.action == "state.rolled_back":
+        print(f"Rollback detected at {trace.timestamp}")
+        print(f"Reason: {trace.details['reason']}")
+        print(f"From version {trace.details['from_version']} to {trace.details['to_version']}")
+```
+
+### 2. Audit Trail for Compliance
+
+```python
+# Get all operations by a specific user
+user_traces = sb.traces.list(
+    user_id="user_123",
+    created_after="2026-01-01T00:00:00Z",
+    created_before="2026-01-31T23:59:59Z",
+    limit=1000
+)
+
+# Generate audit report
+for trace in user_traces:
+    print(f"{trace.timestamp} | {trace.action} | {trace.actor}")
+```
+
+### 3. Performance Monitoring
+
+```python
+# Analyze response times
+traces = sb.traces.list(
+    action="turn.added",
+    created_after="2026-01-31T00:00:00Z",
+    limit=100
+)
+
+latencies = [trace.metadata.get("latency_ms", 0) for trace in traces]
+avg_latency = sum(latencies) / len(latencies)
+max_latency = max(latencies)
+
+print(f"Average latency: {avg_latency:.0f}ms")
+print(f"Max latency: {max_latency:.0f}ms")
+
+if avg_latency > 2000:
+    alert_team("High average latency detected")
+```
+
+### 4. Root Cause Analysis
+
+```python
+# Find what led to a specific error
+error_trace = sb.traces.get(trace_id="trace_error_123")
+error_time = error_trace.timestamp
+
+# Get all traces before the error
+prior_traces = sb.traces.list(
+    session_id=error_trace.session_id,
+    created_before=error_time,
+    limit=20
+)
+
+# Analyze sequence of events
+for trace in reversed(prior_traces):
+    print(f"{trace.action}: {trace.details.get('reasoning', 'N/A')}")
+```
+
+### 5. Rollback Frequency Analysis
+
+```python
+# Track how often agents need rollbacks
+rollbacks = sb.traces.list(
+    action="state.rolled_back",
+    created_after="2026-01-24T00:00:00Z",  # Last 7 days
+    limit=1000
+)
+
+total_sessions = count_sessions_last_7_days()
+rollback_rate = len(rollbacks) / total_sessions
+
+print(f"Rollback rate: {rollback_rate:.1%}")
+
+if rollback_rate > 0.05:  # More than 5%
+    alert_engineering("High rollback rate - agent needs improvement")
+```
+
+---
+
+## Filtering by Time Range
+
+Get traces within a specific time window:
+
+```python
+from datetime import datetime, timedelta
+
+# Last 24 hours
+yesterday = datetime.now() - timedelta(days=1)
+
+traces = sb.traces.list(
+    created_after=yesterday.isoformat(),
+    limit=100
+)
+```
+
+---
+
+## Exporting Traces
+
+Export traces for external analysis:
+
+```python
+import csv
+
+# Get all traces for a session
+traces = sb.traces.list(session_id="sess_abc123", limit=1000)
+
+# Export to CSV
+with open('traces.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['Timestamp', 'Action', 'Actor', 'Details'])
+    
+    for trace in traces:
+        writer.writerow([
+            trace.timestamp,
+            trace.action,
+            trace.actor,
+            json.dumps(trace.details)
+        ])
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Use traces for debugging** (not just logging)
+- **Set up alerts** on critical actions (rollbacks, errors)
+- **Export traces** for long-term storage (compliance)
+- **Filter by time range** (don't fetch everything)
+- **Include reasoning** in all operations (shows up in traces)
+
+### ❌ Avoid This
+- **Don't ignore rollback patterns** (they indicate issues)
+- **Don't fetch traces without filters** (use pagination)
+- **Don't store sensitive data** in trace details
+- **Don't delete traces** (they're your audit trail)
+
+---
+
+## Retention Policy
+
+| Tier | Trace Retention |
+|------|-----------------|
+| **Free** | 7 days |
+| **Pro** | 90 days |
+| **Enterprise** | Custom (up to 7 years) |
+
+**Recommendation**: Export critical traces for long-term storage.
+
+---
+
+## Webhooks
+
+Subscribe to trace events in real-time:
+
+| Event | Description |
+|-------|-------------|
+| `trace.created` | New trace logged |
+| `trace.rollback` | State rollback occurred |
+| `trace.error` | Error trace logged |
+
+Configure in [Dashboard → Webhooks](https://app.statebase.org/webhooks).
+
+---
+
+## Error Responses
+
+| Status Code | Error Code | Description |
+|-------------|------------|-------------|
+| 400 | `invalid_request` | Invalid filter parameters |
+| 404 | `trace_not_found` | Trace doesn't exist or expired |
+| 429 | `rate_limit_exceeded` | Too many requests |
+
+---
+
+## Next Steps
+
+- **[Sessions API](/api-reference/sessions)**: Manage sessions
+- **[Turns API](/api-reference/turns)**: Log conversations
+- **[Replay & Audit](/concepts/replay-audit)**: Debugging strategies
+
+---
+
+**Key Takeaway**: Traces are your **black box recorder**. When things go wrong, traces tell you exactly what happened and why.

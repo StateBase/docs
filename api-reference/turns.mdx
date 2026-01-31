@@ -1,92 +1,463 @@
 ---
 title: "Turns API"
-description: "Record and retrieve agent interactions"
+description: "Log and retrieve conversation interactions between users and agents"
+api: "POST https://api.statebase.org/v1/sessions/{session_id}/turns"
 ---
 
-<Note>
-A **Turn** represents a single atomic interaction cycle: User Input -> Agent Processing -> Agent Output.
-Turns are immutable once recorded.
-</Note>
+# Turns API
 
-## Create Turn
+Turns represent individual **conversation exchanges** between a user and your agent. Each turn captures the complete interaction context including input, output, state changes, and reasoning.
 
-<ParamField path="session_id" type="string" required>
-  The ID of the session this turn belongs to.
-</ParamField>
+---
 
-<ParamField body="input" type="object" required>
-  The user's input. Must contain `type` (e.g. "text") and `content`.
-</ParamField>
+## Why Log Turns?
 
-<ParamField body="output" type="object" required>
-  The agent's response. Must contain `type` and `content`.
-</ParamField>
+Turns provide:
+- **Complete audit trail** of all agent decisions
+- **Debugging capability** (replay exact conversations)
+- **Analytics** (measure success rates, latency, tool usage)
+- **Rollback points** (revert to any previous turn)
 
-<ParamField body="metadata" type="object">
-  Arbitrary metrics (token usage, latency, model versions).
-</ParamField>
+---
 
-<ParamField body="reasoning" type="string">
-  Optional internal monologue or "Check-of-Thought" trace from the agent.
-</ParamField>
+## Add Turn
+
+`POST /v1/sessions/{session_id}/turns`
+
+Logs a new conversation turn. This is typically called **after** your agent generates a response.
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID to add turn to |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `input` | object | ✅ Yes | User's input (see Input Object below) |
+| `output` | object | ✅ Yes | Agent's response (see Output Object below) |
+| `reasoning` | string | No | Why the agent made this decision (for debugging) |
+| `metadata` | object | No | Custom data (e.g., `{"tool_used": "weather_api", "latency_ms": 450}`) |
+| `state_before` | object | No | Session state before this turn |
+| `state_after` | object | No | Session state after this turn |
+
+#### Input Object
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | ✅ Yes | Content type: `"text"`, `"audio"`, `"image"`, `"tool_call"` |
+| `content` | string | ✅ Yes | The actual input content |
+
+#### Output Object
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | ✅ Yes | Content type: `"text"`, `"audio"`, `"image"`, `"tool_result"`, `"error"` |
+| `content` | string | ✅ Yes | The actual output content |
+
+### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique turn ID (format: `turn_<12_chars>`) |
+| `session_id` | string | Parent session ID |
+| `turn_number` | integer | Sequential turn number (starts at 1) |
+| `created_at` | string | ISO 8601 timestamp |
+| `input` | object | User input |
+| `output` | object | Agent output |
+| `reasoning` | string | Agent's reasoning (if provided) |
+| `metadata` | object | Custom metadata |
+| `state_before` | object | State snapshot before turn |
+| `state_after` | object | State snapshot after turn |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.statebase.org/v1/sessions/sess_123/turns \
-  -H "Authorization: Bearer <token>" \
+curl -X POST https://api.statebase.org/v1/sessions/sess_abc123/turns \
+  -H "X-API-Key: sb_your_key" \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
       "type": "text",
-      "content": "What is the capital of France?"
+      "content": "What is the weather in San Francisco?"
     },
     "output": {
       "type": "text",
-      "content": "The capital of France is Paris."
+      "content": "The weather in San Francisco is currently 72°F and sunny."
     },
+    "reasoning": "Called weather API for San Francisco, returned current conditions",
     "metadata": {
-      "model": "gpt-4",
-      "tokens_input": 15,
-      "tokens_output": 7
-    },
-    "reasoning": "User is asking a geography fact. Retrieving from general knowledge."
+      "tool_used": "weather_api",
+      "latency_ms": 450,
+      "model": "gpt-4"
+    }
   }'
+```
+
+```python Python
+from statebase import StateBase
+
+sb = StateBase(api_key="sb_your_key")
+
+turn = sb.sessions.add_turn(
+    session_id="sess_abc123",
+    input={"type": "text", "content": "What is the weather in SF?"},
+    output={"type": "text", "content": "It's 72°F and sunny."},
+    reasoning="Called weather API",
+    metadata={
+        "tool_used": "weather_api",
+        "latency_ms": 450,
+        "model": "gpt-4"
+    }
+)
+
+print(turn.id)  # turn_xyz789
+print(turn.turn_number)  # 1
+```
+
+```typescript TypeScript
+import { StateBase } from '@statebase/node';
+
+const sb = new StateBase({ apiKey: 'sb_your_key' });
+
+const turn = await sb.sessions.addTurn('sess_abc123', {
+  input: {
+    type: 'text',
+    content: 'What is the weather in SF?'
+  },
+  output: {
+    type: 'text',
+    content: "It's 72°F and sunny."
+  },
+  reasoning: 'Called weather API',
+  metadata: {
+    toolUsed: 'weather_api',
+    latencyMs: 450,
+    model: 'gpt-4'
+  }
+});
+
+console.log(turn.id); // turn_xyz789
 ```
 
 ```json Response
 {
   "object": "turn",
-  "id": "turn_098...",
-  "session_id": "sess_123",
-  "created_at": "2026-01-27T10:05:00Z",
+  "id": "turn_xyz789",
+  "session_id": "sess_abc123",
   "turn_number": 1,
-  "input": { "type": "text", "content": "..." },
-  "output": { "type": "text", "content": "..." },
-  "metadata": { "model": "gpt-4", ... },
-  "reasoning": "..."
+  "created_at": "2026-01-31T04:15:00Z",
+  "input": {
+    "type": "text",
+    "content": "What is the weather in San Francisco?"
+  },
+  "output": {
+    "type": "text",
+    "content": "The weather in San Francisco is currently 72°F and sunny."
+  },
+  "reasoning": "Called weather API for San Francisco, returned current conditions",
+  "metadata": {
+    "tool_used": "weather_api",
+    "latency_ms": 450,
+    "model": "gpt-4"
+  },
+  "state_before": null,
+  "state_after": null
 }
 ```
 </CodeGroup>
 
-## List Turns
+---
 
-Retrieve the conversation history for a session.
+## Get Turn
 
-<ParamField path="session_id" type="string" required>
-  The session ID.
-</ParamField>
+`GET /v1/sessions/{session_id}/turns/{turn_id}`
 
-<ParamField query="limit" type="integer" default="20">
-  Max results to return.
-</ParamField>
+Retrieves a specific turn by ID.
 
-<ParamField query="order" type="string" default="desc">
-  Sort order: `asc` or `desc`.
-</ParamField>
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID |
+| `turn_id` | string | ✅ Yes | Turn ID |
+
+### Example
 
 <CodeGroup>
 ```bash cURL
-curl https://api.statebase.org/v1/sessions/sess_123/turns?limit=5 \
-  -H "Authorization: Bearer <token>"
+curl https://api.statebase.org/v1/sessions/sess_abc123/turns/turn_xyz789 \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+turn = sb.sessions.get_turn(
+    session_id="sess_abc123",
+    turn_id="turn_xyz789"
+)
+
+print(turn.reasoning)
+print(turn.metadata)
+```
+
+```typescript TypeScript
+const turn = await sb.sessions.getTurn('sess_abc123', 'turn_xyz789');
+console.log(turn.reasoning);
 ```
 </CodeGroup>
+
+---
+
+## List Turns
+
+`GET /v1/sessions/{session_id}/turns`
+
+Lists all turns for a session, ordered by creation time (newest first).
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | ✅ Yes | Session ID |
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | integer | No | Max turns to return (default: 20, max: 100) |
+| `starting_after` | string | No | Turn ID to start after (for pagination) |
+| `order` | string | No | Sort order: `"asc"` or `"desc"` (default: `"desc"`) |
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl "https://api.statebase.org/v1/sessions/sess_abc123/turns?limit=10" \
+  -H "X-API-Key: sb_your_key"
+```
+
+```python Python
+turns = sb.sessions.list_turns(
+    session_id="sess_abc123",
+    limit=10
+)
+
+for turn in turns:
+    print(f"Turn {turn.turn_number}: {turn.input.content}")
+    print(f"  Response: {turn.output.content}")
+    print(f"  Reasoning: {turn.reasoning}")
+```
+
+```typescript TypeScript
+const turns = await sb.sessions.listTurns('sess_abc123', { limit: 10 });
+
+turns.forEach(turn => {
+  console.log(`Turn ${turn.turnNumber}: ${turn.input.content}`);
+  console.log(`  Response: ${turn.output.content}`);
+});
+```
+
+```json Response
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "turn",
+      "id": "turn_xyz789",
+      "session_id": "sess_abc123",
+      "turn_number": 3,
+      "created_at": "2026-01-31T04:20:00Z",
+      "input": {
+        "type": "text",
+        "content": "Book a flight to NYC"
+      },
+      "output": {
+        "type": "text",
+        "content": "I found 3 flights. Which would you prefer?"
+      },
+      "reasoning": "Searched flights, presented options",
+      "metadata": {
+        "tool_used": "flight_search",
+        "results_count": 3
+      }
+    },
+    {
+      "object": "turn",
+      "id": "turn_abc456",
+      "turn_number": 2,
+      "created_at": "2026-01-31T04:18:00Z",
+      "input": {
+        "type": "text",
+        "content": "What's the weather like there?"
+      },
+      "output": {
+        "type": "text",
+        "content": "NYC is currently 65°F and partly cloudy."
+      },
+      "reasoning": "Called weather API for NYC",
+      "metadata": {
+        "tool_used": "weather_api"
+      }
+    }
+  ],
+  "has_more": false
+}
+```
+</CodeGroup>
+
+---
+
+## Common Use Cases
+
+### 1. Logging Tool Calls
+
+Track when your agent uses external tools:
+
+```python
+# Agent calls weather API
+weather_data = call_weather_api("San Francisco")
+
+# Log the tool call
+sb.sessions.add_turn(
+    session_id=session.id,
+    input={"type": "tool_call", "content": "get_weather(city='San Francisco')"},
+    output={"type": "tool_result", "content": json.dumps(weather_data)},
+    reasoning="Weather API call succeeded",
+    metadata={
+        "tool_name": "weather_api",
+        "latency_ms": 450,
+        "success": True
+    }
+)
+```
+
+### 2. Logging Errors
+
+Track when things go wrong:
+
+```python
+try:
+    result = risky_operation()
+except Exception as e:
+    # Log the error
+    sb.sessions.add_turn(
+        session_id=session.id,
+        input={"type": "text", "content": user_message},
+        output={"type": "error", "content": str(e)},
+        reasoning=f"Operation failed: {type(e).__name__}",
+        metadata={
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "stack_trace": traceback.format_exc()
+        }
+    )
+```
+
+### 3. State Tracking
+
+Log state changes with each turn:
+
+```python
+# Before agent processes input
+state_before = sb.sessions.get(session.id).state
+
+# Agent processes and updates state
+response = agent.process(user_message)
+sb.sessions.update_state(session.id, new_state)
+
+# Log turn with state snapshots
+sb.sessions.add_turn(
+    session_id=session.id,
+    input={"type": "text", "content": user_message},
+    output={"type": "text", "content": response},
+    state_before=state_before,
+    state_after=new_state,
+    reasoning="Updated state based on user input"
+)
+```
+
+### 4. Analytics
+
+Analyze agent performance:
+
+```python
+# Get all turns for a session
+turns = sb.sessions.list_turns(session_id=session.id, limit=100)
+
+# Calculate metrics
+total_turns = len(turns)
+tool_calls = [t for t in turns if t.metadata.get("tool_used")]
+errors = [t for t in turns if t.output.type == "error"]
+avg_latency = sum(t.metadata.get("latency_ms", 0) for t in turns) / total_turns
+
+print(f"Total turns: {total_turns}")
+print(f"Tool calls: {len(tool_calls)}")
+print(f"Errors: {len(errors)}")
+print(f"Avg latency: {avg_latency:.0f}ms")
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Always include `reasoning`** (invaluable for debugging)
+- **Log metadata** (tool names, latency, model used, etc.)
+- **Log errors** (don't just catch and ignore)
+- **Use structured types** (`"text"`, `"tool_call"`, `"error"`)
+- **Include state snapshots** for critical turns
+
+### ❌ Avoid This
+- **Don't skip turn logging** (you'll regret it when debugging)
+- **Don't log sensitive data** in content (use encrypted metadata)
+- **Don't log every internal step** (only user-facing interactions)
+- **Don't forget to paginate** when listing turns
+
+---
+
+## Turn Types Reference
+
+### Input Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `text` | Plain text input | `"What's the weather?"` |
+| `audio` | Audio transcription | `"[Audio: 5.2s]"` |
+| `image` | Image description | `"[Image: screenshot.png]"` |
+| `tool_call` | Tool invocation | `"get_weather(city='SF')"` |
+
+### Output Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `text` | Plain text response | `"It's 72°F and sunny"` |
+| `audio` | Audio response | `"[Audio: response.mp3]"` |
+| `image` | Generated image | `"[Image: chart.png]"` |
+| `tool_result` | Tool output | `{"temp": 72, "condition": "sunny"}` |
+| `error` | Error message | `"API timeout after 5s"` |
+
+---
+
+## Error Responses
+
+| Status Code | Error Code | Description |
+|-------------|------------|-------------|
+| 400 | `invalid_request` | Missing required fields |
+| 404 | `session_not_found` | Session doesn't exist |
+| 404 | `turn_not_found` | Turn doesn't exist |
+| 429 | `rate_limit_exceeded` | Too many requests |
+
+---
+
+## Next Steps
+
+- **[Sessions API](/api-reference/sessions)**: Manage session lifecycle
+- **[Memory API](/api-reference/memory)**: Store long-term knowledge
+- **[Traces API](/api-reference/traces)**: Audit and debugging
+
+---
+
+**Key Takeaway**: Turns are your **time machine**. Log everything, and you can replay any conversation to debug production issues.

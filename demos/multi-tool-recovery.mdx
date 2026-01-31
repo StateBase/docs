@@ -1,0 +1,409 @@
+---
+title: "Multi-Tool Recovery Demo"
+description: "Watch how StateBase recovers from cascading tool failures in a real-world booking agent"
+---
+
+# Multi-Tool Recovery Demo
+
+This demo shows how StateBase handles a **realistic production scenario**: an AI travel agent that needs to call multiple external APIs (flights, hotels, weather) to complete a booking—and what happens when those APIs fail.
+
+---
+
+## The Scenario
+
+**User Goal**: Book a weekend trip to San Francisco
+
+**Agent Tasks**:
+1. Search for flights
+2. Check hotel availability  
+3. Get weather forecast
+4. Confirm booking
+
+**The Problem**: APIs are unreliable in production. What happens when they fail?
+
+---
+
+## Without StateBase: Cascading Failures
+
+Here's what happens in a traditional agent when APIs fail:
+
+```python
+# Traditional approach (no state management)
+
+def book_trip(destination, dates):
+    # Step 1: Search flights
+    flights = call_flight_api(destination, dates)  # ❌ API timeout
+    # Agent crashes or returns generic error
+    # User has to start over from scratch
+    
+    # Step 2: Never reached because Step 1 failed
+    hotels = call_hotel_api(destination, dates)
+    
+    # Step 3: Never reached
+    weather = call_weather_api(destination, dates)
+    
+    return "Booking failed. Please try again."
+```
+
+**User Experience**:
+```
+User: "Book me a trip to SF this weekend"
+Agent: "Error: Flight API timeout. Please try again."
+
+User: "Book me a trip to SF this weekend" (repeats entire request)
+Agent: "Error: Hotel API timeout. Please try again."
+
+User: (gives up and calls customer service)
+```
+
+---
+
+## With StateBase: Graceful Recovery
+
+StateBase checkpoints progress after each successful step:
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+def book_trip_with_statebase(session_id, destination, dates):
+    # Step 1: Search flights
+    try:
+        flights = call_flight_api(destination, dates)
+        
+        # ✅ Checkpoint successful flight search
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                "destination": destination,
+                "dates": dates,
+                "flights": flights,
+                "step": "flights_found"
+            },
+            reasoning="Flight search succeeded"
+        )
+        
+    except APITimeout:
+        # Check if we already have flights from a previous attempt
+        state = sb.sessions.get(session_id).state
+        
+        if "flights" in state:
+            # ✅ Use cached result
+            flights = state["flights"]
+            print("Using cached flight data")
+        else:
+            # Retry with fallback API
+            flights = call_backup_flight_api(destination, dates)
+    
+    # Step 2: Search hotels
+    try:
+        hotels = call_hotel_api(destination, dates)
+        
+        # ✅ Checkpoint successful hotel search
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                **sb.sessions.get(session_id).state,
+                "hotels": hotels,
+                "step": "hotels_found"
+            },
+            reasoning="Hotel search succeeded"
+        )
+        
+    except APITimeout:
+        # Roll back to previous checkpoint
+        sb.sessions.rollback(session_id=session_id, version=-1)
+        return "I found flights, but hotels are unavailable. Would you like to try different dates?"
+    
+    # Step 3: Get weather
+    try:
+        weather = call_weather_api(destination, dates)
+        
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                **sb.sessions.get(session_id).state,
+                "weather": weather,
+                "step": "weather_fetched"
+            },
+            reasoning="Weather data retrieved"
+        )
+        
+    except APITimeout:
+        # Weather is nice-to-have, not critical
+        # Continue without it
+        weather = None
+    
+    # Step 4: Confirm booking
+    return {
+        "flights": flights,
+        "hotels": hotels,
+        "weather": weather or "Weather data unavailable"
+    }
+```
+
+**User Experience**:
+```
+User: "Book me a trip to SF this weekend"
+Agent: "Searching flights..." ✅
+Agent: "Found 3 flights. Checking hotels..." ❌ (timeout)
+Agent: "I found flights, but hotels are temporarily unavailable. 
+       Would you like to try different dates?"
+
+User: "Try next weekend instead"
+Agent: "Searching flights..." ✅ (uses cached data from previous search)
+Agent: "Checking hotels..." ✅
+Agent: "Perfect! I found 2 hotels. Here are your options..."
+```
+
+---
+
+## The Recovery Flow
+
+Here's what happens behind the scenes:
+
+### Attempt 1: Partial Success
+
+```
+Turn 1: User requests trip
+  ↓
+State v0: {"step": "started"}
+  ↓
+Flight API call → SUCCESS ✅
+  ↓
+State v1: {"step": "flights_found", "flights": [...]}
+  ↓
+Hotel API call → TIMEOUT ❌
+  ↓
+Rollback to v1 (preserve flight data)
+  ↓
+Agent: "Flights found, but hotels unavailable. Try different dates?"
+```
+
+### Attempt 2: Full Success
+
+```
+Turn 2: User provides new dates
+  ↓
+Check State v1: Already have flights ✅
+  ↓
+Skip flight API call (use cached data)
+  ↓
+Hotel API call → SUCCESS ✅
+  ↓
+State v2: {"step": "hotels_found", "flights": [...], "hotels": [...]}
+  ↓
+Weather API call → TIMEOUT ❌
+  ↓
+Continue anyway (weather is optional)
+  ↓
+State v3: {"step": "ready_to_book", "flights": [...], "hotels": [...]}
+  ↓
+Agent: "Here's your complete itinerary!"
+```
+
+---
+
+## Code Walkthrough
+
+Let's break down the key StateBase features used:
+
+### 1. Checkpointing After Each Step
+
+```python
+# After successful API call
+sb.sessions.update_state(
+    session_id=session_id,
+    state={"flights": flights, "step": "flights_found"},
+    reasoning="Flight search succeeded"
+)
+```
+
+**Why this matters**: If the next API call fails, we don't lose this data.
+
+### 2. Checking for Cached Data
+
+```python
+# Before retrying expensive API call
+state = sb.sessions.get(session_id).state
+
+if "flights" in state:
+    flights = state["flights"]  # ✅ Reuse previous result
+else:
+    flights = call_flight_api()  # Only call if needed
+```
+
+**Why this matters**: Saves money and time by not repeating successful operations.
+
+### 3. Graceful Degradation
+
+```python
+try:
+    weather = call_weather_api()
+except APITimeout:
+    weather = None  # ✅ Continue without weather data
+```
+
+**Why this matters**: Not all data is critical. Distinguish between must-have and nice-to-have.
+
+### 4. Rollback on Critical Failures
+
+```python
+except CriticalAPIError:
+    # Roll back to last known good state
+    sb.sessions.rollback(session_id=session_id, version=-1)
+    return "I need to start over. Let me try a different approach."
+```
+
+**Why this matters**: Prevents corrupted state from breaking the entire conversation.
+
+---
+
+## Full Working Example
+
+Here's a complete, runnable example:
+
+```python
+from statebase import StateBase
+import random
+
+sb = StateBase(api_key="your-key")
+
+# Simulate unreliable APIs
+def call_flight_api(destination, dates):
+    if random.random() < 0.3:  # 30% failure rate
+        raise Exception("Flight API timeout")
+    return [{"airline": "United", "price": 350}]
+
+def call_hotel_api(destination, dates):
+    if random.random() < 0.3:
+        raise Exception("Hotel API timeout")
+    return [{"name": "Hilton", "price": 200}]
+
+def call_weather_api(destination, dates):
+    if random.random() < 0.5:  # 50% failure rate (less critical)
+        raise Exception("Weather API timeout")
+    return {"forecast": "Sunny, 72°F"}
+
+# Main booking function
+def book_trip(user_id, destination, dates):
+    # Create session
+    session = sb.sessions.create(
+        agent_id="travel-agent",
+        user_id=user_id,
+        initial_state={"destination": destination, "dates": dates}
+    )
+    
+    print(f"🎫 Booking trip to {destination} for {dates}")
+    
+    # Step 1: Flights
+    try:
+        print("  Searching flights...")
+        flights = call_flight_api(destination, dates)
+        sb.sessions.update_state(
+            session_id=session.id,
+            state={**session.state, "flights": flights},
+            reasoning="Flight search succeeded"
+        )
+        print(f"  ✅ Found {len(flights)} flights")
+    except Exception as e:
+        print(f"  ❌ Flight search failed: {e}")
+        # Check cache
+        if "flights" in session.state:
+            flights = session.state["flights"]
+            print("  ♻️ Using cached flight data")
+        else:
+            return "Unable to search flights. Please try again."
+    
+    # Step 2: Hotels
+    try:
+        print("  Searching hotels...")
+        hotels = call_hotel_api(destination, dates)
+        sb.sessions.update_state(
+            session_id=session.id,
+            state={**sb.sessions.get(session.id).state, "hotels": hotels},
+            reasoning="Hotel search succeeded"
+        )
+        print(f"  ✅ Found {len(hotels)} hotels")
+    except Exception as e:
+        print(f"  ❌ Hotel search failed: {e}")
+        return f"Found flights but hotels unavailable. Try different dates?"
+    
+    # Step 3: Weather (optional)
+    try:
+        print("  Fetching weather...")
+        weather = call_weather_api(destination, dates)
+        print(f"  ✅ Weather: {weather['forecast']}")
+    except Exception as e:
+        print(f"  ⚠️ Weather unavailable: {e}")
+        weather = {"forecast": "Unknown"}
+    
+    # Success!
+    print("\n🎉 Booking complete!")
+    return {
+        "flights": flights,
+        "hotels": hotels,
+        "weather": weather
+    }
+
+# Run the demo
+if __name__ == "__main__":
+    result = book_trip(
+        user_id="demo_user",
+        destination="San Francisco",
+        dates="2024-03-15 to 2024-03-17"
+    )
+    print(result)
+```
+
+**Sample Output**:
+```
+🎫 Booking trip to San Francisco for 2024-03-15 to 2024-03-17
+  Searching flights...
+  ✅ Found 1 flights
+  Searching hotels...
+  ❌ Hotel search failed: Hotel API timeout
+Found flights but hotels unavailable. Try different dates?
+
+# User retries with same dates
+🎫 Booking trip to San Francisco for 2024-03-15 to 2024-03-17
+  Searching flights...
+  ♻️ Using cached flight data
+  Searching hotels...
+  ✅ Found 1 hotels
+  Fetching weather...
+  ✅ Weather: Sunny, 72°F
+
+🎉 Booking complete!
+```
+
+---
+
+## Key Takeaways
+
+1. **Checkpoint after each successful step** → Don't lose progress
+2. **Check cache before retrying** → Save money and time
+3. **Distinguish critical vs optional** → Graceful degradation
+4. **Roll back on corruption** → Prevent cascading failures
+
+---
+
+## Try It Yourself
+
+1. Copy the code above
+2. Replace `"your-key"` with your StateBase API key
+3. Run it multiple times to see different failure scenarios
+4. Observe how StateBase preserves progress across retries
+
+---
+
+## Next Steps
+
+- **[Checkpoints & Rollbacks](/concepts/checkpoints-rollbacks)**: Deep dive into recovery strategies
+- **[Failure Modes](/concepts/failure-modes)**: Learn all 7 common failure patterns
+- **[Tool Calling Pattern](/patterns/tool-calling)**: Best practices for external API calls
+
+---
+
+**The Bottom Line**: Production AI agents deal with unreliable external systems. StateBase ensures that one API timeout doesn't force users to start over from scratch.

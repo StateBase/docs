@@ -1,0 +1,274 @@
+---
+title: "Sessions, Turns & Memory"
+description: "Understanding the three core primitives that make StateBase work"
+---
+
+# Sessions, Turns & Memory
+
+StateBase is built on **three fundamental primitives** that work together to give your AI agents reliable state management and memory. Understanding how these interact is essential to building production-ready agents.
+
+---
+
+## The Mental Model
+
+Think of StateBase like a **conversation database**:
+
+```
+Session = A conversation thread
+Turn = A single exchange (user input → agent output)
+Memory = Long-term facts extracted from conversations
+```
+
+Each primitive serves a distinct purpose and has different lifecycle characteristics.
+
+---
+
+## 1. Sessions: The Container
+
+A **Session** is an isolated container for a single conversation or task. It's the top-level unit of state in StateBase.
+
+### Characteristics
+- **Immutable ID**: Once created, a session ID never changes
+- **Mutable State**: The session's internal state can be updated throughout its lifecycle
+- **TTL-based**: Sessions automatically expire after a configurable time (default: 24 hours)
+- **User-scoped**: Each session belongs to a specific `user_id` for data isolation
+
+### When to Create a Session
+```python
+# ✅ Good: One session per conversation
+session = sb.sessions.create(
+    agent_id="customer-support",
+    user_id="user_123",
+    initial_state={"status": "new", "priority": "normal"}
+)
+
+# ❌ Bad: Creating a new session for every message
+# This loses conversation context!
+```
+
+### Session State
+The `state` object is a **JSON dictionary** that represents your agent's current working memory:
+
+```python
+{
+    "conversation_stage": "gathering_requirements",
+    "user_preferences": {"language": "python", "framework": "fastapi"},
+    "pending_actions": ["create_project", "setup_database"],
+    "last_tool_result": {...}
+}
+```
+
+**Key Insight**: State is **ephemeral** (tied to the session TTL). For long-term knowledge, use Memory.
+
+---
+
+## 2. Turns: The Interaction Log
+
+A **Turn** represents a single round-trip interaction between the user and your agent.
+
+### Anatomy of a Turn
+```python
+turn = sb.sessions.add_turn(
+    session_id=session.id,
+    input={"type": "text", "content": "What's the weather in SF?"},
+    output={"type": "text", "content": "It's 72°F and sunny."},
+    reasoning="Used weather API to fetch current conditions",
+    metadata={"tool_used": "weather_api", "latency_ms": 450}
+)
+```
+
+### Turn Structure
+| Field | Type | Purpose |
+|-------|------|---------|
+| `input` | Object | User's message or trigger |
+| `output` | Object | Agent's response |
+| `reasoning` | String | Why the agent made this decision (for debugging) |
+| `metadata` | Object | Custom tracking data (tool calls, latency, etc.) |
+| `state_before` | Object | Session state snapshot before this turn |
+| `state_after` | Object | Session state snapshot after this turn |
+
+### Why Track Turns?
+1. **Debugging**: Replay exact conversation history to reproduce bugs
+2. **Auditing**: Compliance and trust (who said what, when)
+3. **Analytics**: Measure agent performance (success rate, tool usage)
+4. **Rollback**: Revert to a previous turn if the agent goes off-track
+
+---
+
+## 3. Memory: Long-Term Knowledge
+
+**Memory** is how your agent remembers facts **across sessions**. Unlike state (which is session-scoped), memories are **global** or **user-scoped**.
+
+### Types of Memory
+```python
+# User-specific memory (scoped to user_id)
+sb.memory.add(
+    content="User prefers concise responses without explanations",
+    type="preference",
+    session_id=session.id,  # Links to current session
+    tags=["communication_style"]
+)
+
+# Global memory (available to all sessions)
+sb.memory.add(
+    content="Company policy: Always ask for confirmation before deleting data",
+    type="policy",
+    tags=["safety", "compliance"]
+)
+```
+
+### Memory vs State
+
+| Aspect | State | Memory |
+|--------|-------|--------|
+| **Scope** | Single session | Cross-session |
+| **Lifecycle** | Ephemeral (TTL) | Permanent |
+| **Structure** | Nested JSON | Flat text + embeddings |
+| **Access** | Direct read | Semantic search |
+| **Use Case** | Working memory | Long-term knowledge |
+
+### Semantic Search
+Memories are automatically embedded and indexed for **vector similarity search**:
+
+```python
+# Agent receives: "What did I tell you about my preferences?"
+relevant_memories = sb.memory.search(
+    query="user communication preferences",
+    session_id=session.id,  # Prioritize this user's memories
+    limit=5
+)
+# Returns: ["User prefers concise responses...", ...]
+```
+
+---
+
+## How They Work Together
+
+Here's a real-world example of all three primitives in action:
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+# 1. Create a session for a new conversation
+session = sb.sessions.create(
+    agent_id="personal-assistant",
+    user_id="alice",
+    initial_state={"task": "plan_trip", "destination": None}
+)
+
+# 2. First turn: User provides input
+sb.sessions.add_turn(
+    session_id=session.id,
+    input="I want to plan a trip to Japan",
+    output="Great! When are you planning to go?",
+    reasoning="Need to gather travel dates before searching flights"
+)
+
+# Update state with new information
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"destination": "Japan", "dates": None},
+    reasoning="User specified destination"
+)
+
+# 3. Extract a long-term memory
+sb.memory.add(
+    content="Alice is interested in traveling to Japan",
+    type="interest",
+    session_id=session.id,
+    tags=["travel", "japan"]
+)
+
+# 4. Later, in a NEW session (weeks later)...
+new_session = sb.sessions.create(agent_id="personal-assistant", user_id="alice")
+
+# Retrieve relevant memories
+memories = sb.memory.search(
+    query="travel preferences",
+    session_id=new_session.id,
+    limit=3
+)
+# Returns: ["Alice is interested in traveling to Japan", ...]
+
+# Agent can now say: "I remember you were interested in Japan. 
+# Would you like help planning that trip?"
+```
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **One session per conversation thread**
+- **Log every turn** (even errors—they're valuable for debugging)
+- **Update state incrementally** as the conversation progresses
+- **Extract memories** when you learn something important about the user
+- **Use semantic search** to retrieve relevant memories at the start of each session
+
+### ❌ Avoid This
+- **Don't create a new session for every message** (loses context)
+- **Don't store long-term facts in state** (they'll expire with the session)
+- **Don't skip turn logging** (you'll regret it when debugging production issues)
+- **Don't overload memory** with trivial facts (focus on high-signal information)
+
+---
+
+## Common Patterns
+
+### Pattern 1: Context Injection
+```python
+# At the start of each turn, inject relevant context
+context = sb.sessions.get_context(
+    session_id=session.id,
+    query=user_message,
+    memory_limit=5,
+    turn_limit=10
+)
+
+# context contains:
+# - Current state
+# - 5 most relevant memories
+# - Last 10 turns
+
+# Feed this to your LLM prompt
+```
+
+### Pattern 2: Progressive State Building
+```python
+# Turn 1: Gather destination
+state = {"destination": "Japan", "dates": None, "budget": None}
+
+# Turn 2: Gather dates
+state = {"destination": "Japan", "dates": "2024-03-15", "budget": None}
+
+# Turn 3: Gather budget
+state = {"destination": "Japan", "dates": "2024-03-15", "budget": 5000}
+
+# Now you have complete information to execute the task
+```
+
+### Pattern 3: Memory Consolidation
+```python
+# After a successful conversation, consolidate learnings
+if task_completed:
+    sb.memory.add(
+        content=f"User successfully booked trip to {state['destination']}",
+        type="event",
+        session_id=session.id,
+        metadata={"outcome": "success", "total_cost": state["budget"]}
+    )
+```
+
+---
+
+## Next Steps
+
+- **[Checkpoints & Rollbacks](/concepts/checkpoints-rollbacks)**: Learn how to create save points and revert state
+- **[Replay & Audit](/concepts/replay-audit)**: Understand how to debug and replay conversations
+- **[Quickstart](/quickstart)**: Build your first stateful agent in 2 minutes
+
+---
+
+**Key Takeaway**: Sessions are containers, Turns are logs, Memory is knowledge. Master these three primitives and you can build agents that never forget.

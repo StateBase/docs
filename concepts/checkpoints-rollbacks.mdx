@@ -1,0 +1,372 @@
+---
+title: "Checkpoints & Rollbacks"
+description: "Time-travel debugging for AI agents: save points, rollbacks, and recovery strategies"
+---
+
+# Checkpoints & Rollbacks
+
+StateBase gives your AI agents a **superpower that humans don't have**: the ability to **undo mistakes**. This is the core of StateBase's reliability guarantee.
+
+---
+
+## The Problem: Non-Deterministic Failures
+
+AI agents fail in unpredictable ways:
+
+```python
+# Turn 5: Agent is working perfectly
+state = {"user_request": "book flight", "destination": "NYC", "dates": "2024-03-15"}
+
+# Turn 6: LLM hallucinates and corrupts state
+state = {"user_request": "cancel everything", "destination": None, "dates": None}
+# ❌ Conversation is now broken. Traditional approach: start over.
+```
+
+**With StateBase**: You can **roll back to Turn 5** and try again with a different prompt or model.
+
+---
+
+## How It Works: Automatic State Versioning
+
+Every time you update a session's state, StateBase creates an **immutable snapshot**:
+
+```python
+# Version 0: Initial state
+session = sb.sessions.create(
+    agent_id="travel-agent",
+    initial_state={"step": "gathering_info"}
+)
+
+# Version 1: After first update
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"step": "searching_flights", "destination": "NYC"},
+    reasoning="User provided destination"
+)
+
+# Version 2: After second update
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"step": "confirming_booking", "flight_id": "UA123"},
+    reasoning="User selected flight"
+)
+```
+
+Each version is stored in the database with:
+- **Version number** (auto-incrementing)
+- **State snapshot** (full JSON)
+- **Timestamp** (when it was created)
+- **Reasoning** (why this change was made)
+- **Trace ID** (which operation triggered it)
+
+---
+
+## Rollback: Undo to a Previous Version
+
+If your agent makes a mistake, you can **revert to any previous state version**:
+
+```python
+# Agent corrupted state at version 5
+# Roll back to version 3 (before the error)
+
+restored_state = sb.sessions.rollback(
+    session_id=session.id,
+    version=3
+)
+
+# State is now identical to version 3
+# Continue the conversation from there
+```
+
+### What Happens During Rollback?
+1. StateBase retrieves the state snapshot from version 3
+2. Creates a **new version** (e.g., version 6) with the restored state
+3. Returns the restored state to your agent
+4. **Preserves history**: Versions 4 and 5 are still in the database for audit
+
+**Key Insight**: Rollbacks are **non-destructive**. You can always see what went wrong by inspecting the corrupted versions.
+
+---
+
+## Checkpoint Strategies
+
+Not every state change needs to be checkpointed. Here are common strategies:
+
+### Strategy 1: Checkpoint After Tool Calls
+```python
+# Before calling an external API
+result = call_weather_api(city="San Francisco")
+
+# Checkpoint the result
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"weather_data": result, "last_tool": "weather_api"},
+    reasoning="Cached weather API result"
+)
+```
+
+**Why**: Tool calls are expensive and may fail. Checkpointing lets you retry without re-calling the API.
+
+### Strategy 2: Checkpoint After User Confirmation
+```python
+# User confirmed the booking
+if user_confirmed:
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"booking_confirmed": True, "confirmation_id": "ABC123"},
+        reasoning="User confirmed booking"
+    )
+```
+
+**Why**: User confirmations are critical decision points. You want to be able to roll back to "just before confirmation" if something goes wrong.
+
+### Strategy 3: Checkpoint Before Risky Operations
+```python
+# About to delete user data (risky!)
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"pre_delete_snapshot": current_data},
+    reasoning="Checkpoint before deletion"
+)
+
+# Perform deletion
+delete_user_data(user_id)
+
+# If deletion fails, roll back to pre_delete_snapshot
+```
+
+**Why**: Destructive operations should always have a checkpoint immediately before.
+
+---
+
+## Automatic Checkpointing
+
+StateBase automatically creates checkpoints in these scenarios:
+
+| Event | Checkpoint Created | Reasoning |
+|-------|-------------------|-----------|
+| `sessions.create()` | ✅ Version 0 | Initial state |
+| `sessions.update_state()` | ✅ New version | Explicit state change |
+| `sessions.add_turn()` | ⚠️ Optional | Only if `state_after` differs from `state_before` |
+| `memory.add()` | ❌ No | Memories don't affect session state |
+
+### Controlling Turn-Based Checkpointing
+
+By default, `add_turn()` **does not** create a checkpoint unless you explicitly update state:
+
+```python
+# This does NOT create a checkpoint
+sb.sessions.add_turn(
+    session_id=session.id,
+    input="Hello",
+    output="Hi there!"
+)
+
+# This DOES create a checkpoint
+sb.sessions.add_turn(
+    session_id=session.id,
+    input="Book a flight to NYC",
+    output="Sure, searching flights...",
+    state_after={"destination": "NYC", "searching": True}
+)
+```
+
+**Why**: Most turns don't change state (e.g., small talk). Checkpointing every turn would be wasteful.
+
+---
+
+## Recovery Patterns
+
+### Pattern 1: Retry with Different Prompt
+
+```python
+# Agent failed at version 5
+# Roll back to version 4 and try a different approach
+
+sb.sessions.rollback(session_id=session.id, version=4)
+
+# Try again with a more explicit prompt
+response = llm.generate(
+    prompt="You are a travel agent. Be VERY careful not to delete user data.",
+    context=sb.sessions.get_context(session_id=session.id)
+)
+```
+
+### Pattern 2: Fallback to Human
+
+```python
+# Agent is stuck in a loop (versions 6, 7, 8 all failed)
+# Roll back to version 5 and escalate to human
+
+sb.sessions.rollback(session_id=session.id, version=5)
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"escalated_to_human": True, "reason": "Agent stuck in loop"},
+    reasoning="Automatic escalation after 3 failed attempts"
+)
+
+notify_human_agent(session.id)
+```
+
+### Pattern 3: A/B Testing Recovery
+
+```python
+# Version 3 failed with GPT-4
+# Roll back and try with Claude
+
+sb.sessions.rollback(session_id=session.id, version=2)
+
+# Try Claude instead
+response = anthropic.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    messages=[{"role": "user", "content": user_message}]
+)
+
+# If Claude succeeds, log which model worked
+sb.sessions.update_state(
+    session_id=session.id,
+    state={"successful_model": "claude-3.5-sonnet"},
+    reasoning="GPT-4 failed, Claude succeeded"
+)
+```
+
+---
+
+## Forking: Branching Conversations
+
+Sometimes you don't want to **replace** the current state—you want to **explore an alternative timeline**. That's where **forking** comes in.
+
+### What is Forking?
+
+Forking creates a **new session** that starts from a specific version of an existing session:
+
+```python
+# Original session is at version 5
+# Fork from version 3 to explore "what if" scenario
+
+forked_session = sb.sessions.fork(
+    session_id=original_session.id,
+    version=3
+)
+
+# forked_session is a NEW session with:
+# - Different session ID
+# - State identical to original session's version 3
+# - Metadata: {"forked_from": original_session.id, "forked_version": 3}
+```
+
+### When to Fork vs Rollback
+
+| Use Case | Rollback | Fork |
+|----------|----------|------|
+| **Undo a mistake** | ✅ | ❌ |
+| **Try alternative approach** | ❌ | ✅ |
+| **A/B test prompts** | ❌ | ✅ |
+| **Preserve original conversation** | ❌ | ✅ |
+| **Debug in production** | ❌ | ✅ |
+
+### Example: Debugging in Production
+
+```python
+# Production session is failing at turn 10
+# Don't touch it—fork it for debugging
+
+debug_session = sb.sessions.fork(
+    session_id=production_session.id,
+    version=9  # Fork from just before failure
+)
+
+# Experiment in the forked session
+# Original production session is untouched
+```
+
+---
+
+## Cost vs Safety Trade-offs
+
+Checkpointing has a cost (storage + API calls). Here's how to balance safety and efficiency:
+
+### High-Frequency Checkpointing (Paranoid Mode)
+```python
+# Checkpoint after EVERY state change
+# Cost: High | Safety: Maximum
+sb.sessions.update_state(session_id, state, reasoning="...")
+```
+
+**Use when**: Handling financial transactions, medical data, or compliance-critical workflows.
+
+### Medium-Frequency Checkpointing (Recommended)
+```python
+# Checkpoint after:
+# - Tool calls
+# - User confirmations
+# - Major state transitions
+
+# Cost: Medium | Safety: High
+if is_critical_operation:
+    sb.sessions.update_state(session_id, state, reasoning="...")
+```
+
+**Use when**: Most production agents (customer support, personal assistants, etc.)
+
+### Low-Frequency Checkpointing (Optimized)
+```python
+# Checkpoint only at:
+# - Session start
+# - Session end
+# - Explicit user requests
+
+# Cost: Low | Safety: Medium
+if user_requested_save:
+    sb.sessions.update_state(session_id, state, reasoning="User checkpoint")
+```
+
+**Use when**: High-volume, low-risk agents (chatbots, FAQ assistants)
+
+---
+
+## Monitoring Rollback Frequency
+
+If you're rolling back frequently, it's a sign your agent needs improvement:
+
+```python
+# Track rollback rate in your analytics
+rollback_count = count_rollbacks_last_24h()
+total_sessions = count_sessions_last_24h()
+
+rollback_rate = rollback_count / total_sessions
+
+if rollback_rate > 0.05:  # More than 5% of sessions need rollback
+    alert_engineering_team("High rollback rate detected")
+```
+
+**Healthy rollback rate**: < 2%  
+**Warning threshold**: 5%  
+**Critical threshold**: 10%
+
+---
+
+## Best Practices
+
+### ✅ Do This
+- **Checkpoint before risky operations** (deletions, payments, API calls)
+- **Include reasoning** in every checkpoint (helps with debugging)
+- **Use forking for debugging** (don't modify production sessions)
+- **Monitor rollback frequency** (it's a health metric)
+
+### ❌ Avoid This
+- **Don't checkpoint every turn** (wasteful unless state actually changes)
+- **Don't roll back without understanding why** (you'll repeat the same mistake)
+- **Don't delete checkpoint history** (it's your audit trail)
+
+---
+
+## Next Steps
+
+- **[Replay & Audit](/concepts/replay-audit)**: Learn how to replay conversations for debugging
+- **[Failure Modes](/concepts/failure-modes)**: Understand common agent failure patterns
+- **[Production Playbook](/playbook/when-to-checkpoint)**: Advanced checkpointing strategies
+
+---
+
+**Key Takeaway**: Checkpoints are your time machine. Use them strategically to make your agents resilient to LLM non-determinism.

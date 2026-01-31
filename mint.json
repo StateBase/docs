@@ -8,8 +8,15 @@
     "colors": {
         "primary": "#2563EB",
         "light": "#38BDF8",
-        "dark": "#050505",
-        "anchors": "#2563EB"
+        "dark": "#0A0A0A",
+        "anchors": {
+            "from": "#2563EB",
+            "to": "#1E40AF"
+        },
+        "background": {
+            "dark": "#0A0A0A",
+            "light": "#FFFFFF"
+        }
     },
     "topbarLinks": [
         {
@@ -17,36 +24,48 @@
             "url": "https://app.statebase.org"
         },
         {
-            "name": "API Status",
+            "name": "Status",
             "url": "https://status.statebase.org"
         }
     ],
     "topbarCtaButton": {
-        "type": "github",
-        "url": "https://github.com/statebase/statebase"
+        "name": "Get Started",
+        "url": "https://app.statebase.org/signup"
     },
     "tabs": [
         {
-            "name": "Documentation",
+            "name": "Docs",
             "url": "introduction"
-        },
-        {
-            "name": "Guides & Patterns",
-            "url": "patterns/tool-calling"
         },
         {
             "name": "API Reference",
             "url": "api-reference/introduction"
         },
         {
-            "name": "Production Playbook",
-            "url": "playbook/when-to-checkpoint"
+            "name": "Guides",
+            "url": "patterns/tool-calling"
+        }
+    ],
+    "anchors": [
+        {
+            "name": "GitHub",
+            "icon": "github",
+            "url": "https://github.com/StateBase"
+        },
+        {
+            "name": "Discord",
+            "icon": "discord",
+            "url": "https://discord.gg/statebase"
+        },
+        {
+            "name": "Changelog",
+            "icon": "list",
+            "url": "changelog"
         }
     ],
     "navigation": [
         {
-            "tab": "Documentation",
-            "group": "Start Here",
+            "group": "Getting Started",
             "pages": [
                 "introduction",
                 "start-here/when-to-use",
@@ -55,16 +74,6 @@
             ]
         },
         {
-            "tab": "Documentation",
-            "group": "Demos",
-            "pages": [
-                "demos/hallucination-recovery",
-                "demos/debugging-replay",
-                "demos/multi-tool-recovery"
-            ]
-        },
-        {
-            "tab": "Documentation",
             "group": "Core Concepts",
             "pages": [
                 "concepts/mental-models",
@@ -76,28 +85,34 @@
             ]
         },
         {
-            "tab": "Guides & Patterns",
+            "group": "Live Demos",
+            "pages": [
+                "demos/hallucination-recovery",
+                "demos/debugging-replay",
+                "demos/multi-tool-recovery"
+            ]
+        },
+        {
+            "group": "API Reference",
+            "pages": [
+                "api-reference/introduction",
+                "api-reference/sessions",
+                "api-reference/turns",
+                "api-reference/memory",
+                "api-reference/traces"
+            ]
+        },
+        {
             "group": "Agent Patterns",
             "pages": [
                 "patterns/tool-calling",
-                "patterns/long-running",
                 "patterns/rag-agents",
-                "patterns/multi-agent",
-                "patterns/human-in-the-loop"
+                "patterns/human-in-the-loop",
+                "patterns/long-running",
+                "patterns/multi-agent"
             ]
         },
         {
-            "tab": "Guides & Patterns",
-            "group": "SDKs",
-            "pages": [
-                "sdks/python",
-                "sdks/typescript",
-                "sdks/patterns",
-                "sdks/error-handling"
-            ]
-        },
-        {
-            "tab": "Guides & Patterns",
             "group": "Integrations",
             "pages": [
                 "integrations/openai",
@@ -109,17 +124,16 @@
             ]
         },
         {
-            "tab": "Guides & Patterns",
-            "group": "Examples & Templates",
+            "group": "SDKs",
             "pages": [
-                "templates/starter-agent",
-                "templates/production-agent",
-                "templates/failure-injection"
+                "sdks/python",
+                "sdks/typescript",
+                "sdks/patterns",
+                "sdks/error-handling"
             ]
         },
         {
-            "tab": "Production Playbook",
-            "group": "Strategy",
+            "group": "Production Playbook",
             "pages": [
                 "playbook/when-to-checkpoint",
                 "playbook/rollback-strategies",
@@ -128,8 +142,7 @@
             ]
         },
         {
-            "tab": "Production Playbook",
-            "group": "Security & Reliability",
+            "group": "Security & Compliance",
             "pages": [
                 "security/data-handling",
                 "security/isolation-model",
@@ -137,26 +150,31 @@
             ]
         },
         {
-            "tab": "API Reference",
-            "group": "Endpoints",
+            "group": "Templates & Examples",
             "pages": [
-                "api-reference/introduction",
-                "api-reference/sessions",
-                "api-reference/turns",
-                "api-reference/memory",
-                "api-reference/traces"
-            ]
-        },
-        {
-            "group": "Other",
-            "pages": [
-                "changelog"
+                "templates/starter-agent",
+                "templates/production-agent",
+                "templates/failure-injection"
             ]
         }
     ],
     "footerSocials": {
         "x": "https://x.com/statebase",
-        "github": "https://github.com/statebase",
-        "linkedin": "https://linkedin.com/company/statebase"
+        "github": "https://github.com/StateBase",
+        "linkedin": "https://linkedin.com/company/statebase",
+        "discord": "https://discord.gg/statebase"
+    },
+    "feedback": {
+        "thumbsRating": true,
+        "suggestEdit": true,
+        "raiseIssue": true
+    },
+    "search": {
+        "prompt": "Search StateBase docs..."
+    },
+    "analytics": {
+        "posthog": {
+            "apiKey": "phc_placeholder"
+        }
     }
 }
