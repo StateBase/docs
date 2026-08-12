@@ -1,0 +1,120 @@
+---
+title: "LangGraph Integration"
+description: "Use StateBase as the durable checkpointing layer for LangGraph agents"
+---
+
+# LangGraph Integration
+
+[LangGraph](https://langchain-ai.github.io/langgraph/) models agents as state graphs: nodes run, state flows along edges, and checkpoints let you persist and resume the graph. LangGraph's built-in checkpointers are usually in-memory or SQLite — fine for local, fragile in production.
+
+StateBase plugs in as a **durable checkpointer**: every graph state is persisted to StateBase, survives restarts, and is auditable via Traces.
+
+---
+
+## Why StateBase + LangGraph
+
+| LangGraph default | StateBase |
+|---|---|
+| SQLite/in-memory checkpoints | Distributed, durable storage |
+| No cross-instance sharing | Multiple workers resume the same graph |
+| No audit trail | Every checkpoint has reasoning + trace |
+| Manual recovery | Rollback to any prior graph state |
+
+---
+
+## Setup
+
+```bash
+pip install statebase langgraph langchain-openai
+```
+
+---
+
+## Durable Checkpointer
+
+Use StateBase as the `checkpointer` in your graph:
+
+```python
+from statebase import StateBase
+from langgraph.graph import StateGraph, START, END
+
+sb = StateBase(api_key="your-key")
+
+class StateBaseCheckpointer:
+    """Minimal durable checkpointer backed by StateBase sessions."""
+
+    def __init__(self, session_id):
+        self.session_id = session_id
+
+    def get(self, thread_id):
+        state = sb.sessions.get(session_id=self.session_id).state
+        return state.get("graph", {}).get(thread_id)
+
+    def put(self, thread_id, graph_state):
+        state = sb.sessions.get(session_id=self.session_id).state
+        graph = state.get("graph", {})
+        graph[thread_id] = graph_state
+        sb.sessions.update_state(
+            session_id=self.session_id,
+            state={"graph": graph},
+            reasoning=f"LangGraph checkpoint for {thread_id}"
+        )
+        return graph_state
+
+
+# Build a simple graph
+def research(state):
+    return {"research": f"Research for: {state['topic']}"}
+
+
+def summarize(state):
+    return {"summary": f"Summary of {state['research']}"}
+
+
+builder = StateGraph(dict)
+builder.add_node("research", research)
+builder.add_node("summarize", summarize)
+builder.add_edge(START, "research")
+builder.add_edge("research", "summarize")
+builder.add_edge("summarize", END)
+
+graph = builder.compile(checkpointer=StateBaseCheckpointer("langgraph-prod"))
+```
+
+---
+
+## Running the Graph
+
+```python
+config = {"configurable": {"thread_id": "thread-1"}}
+
+# First run — crashes are recoverable at any node
+for event in graph.stream({"topic": "durable execution"}, config):
+    print(event)
+
+# Resume after a crash: LangGraph replays from the last StateBase checkpoint
+for event in graph.stream(None, config):
+    print(event)
+```
+
+Because the checkpointer writes to StateBase, a crashed worker can be replaced by a new one that reads the same `thread_id` and continues — no local state to lose.
+
+---
+
+## Auditing
+
+Every graph checkpoint is a StateBase state update with reasoning, so you can inspect exactly what the graph was thinking at each node:
+
+```python
+turns = sb.sessions.list_turns(session_id="langgraph-prod")
+for turn in turns:
+    print(turn.reasoning)
+```
+
+---
+
+## Next Steps
+
+- **[Agentic RAG Pattern](/patterns/agentic-rag)**: RAG agents built on the same durable layer
+- **[Python SDK](/sdks/python)**: full SDK reference
+- **[Replay & Audit](/concepts/replay-audit)**: debug graph runs in production

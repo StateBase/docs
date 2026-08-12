@@ -1,0 +1,111 @@
+---
+title: "Incident Recovery"
+description: "A practical runbook for when a production agent goes wrong"
+---
+
+# Incident Recovery
+
+Agents will fail. This runbook is the sequence you follow when a production agent goes wrong — the same discipline incident responders use, applied to LLM systems.
+
+---
+
+## The Runbook
+
+### 1. Stop the bleeding
+
+Freeze the affected session so the agent can't keep mutating state while you investigate:
+
+```python
+sb.sessions.update_state(
+    session_id=session_id,
+    state={"incident": True, "frozen": True},
+    reasoning="INCIDENT: pausing session for investigation"
+)
+```
+
+Redirect new traffic to a safe version or the human queue.
+
+### 2. Reconstruct what happened
+
+Do **not** trust the agent's summary. Replay the actual decision trace:
+
+```python
+turns = sb.sessions.list_turns(session_id=session_id, limit=100)
+traces = sb.traces.list(session_id=session_id)
+
+for t in turns:
+    print(t.reasoning)     # what the agent said it was doing
+for tr in traces:
+    print(tr.action, tr.details)  # what it actually did
+```
+
+### 3. Find the divergence point
+
+Identify the exact turn where state stopped matching reality. This is your rollback target:
+
+```python
+# Show the state at every checkpoint
+state_versions = sb.sessions.list_versions(session_id=session_id)
+for v in state_versions:
+    print(v.version, v.reasoning, v.created_at)
+```
+
+### 4. Roll back to the last good state
+
+```python
+sb.sessions.rollback(
+    session_id=session_id,
+    version=last_good_version,  # e.g. -3 (three checkpoints back)
+    reason="INCIDENT-2314: rollback to last verified state",
+)
+```
+
+Rollback is versioned and auditable — the rollback itself becomes a new version, so you can inspect or undo it.
+
+### 5. Prevent recurrence
+
+Check what **enabled** the failure:
+
+- **Missing checkpoint?** Add a checkpoint before the risky operation.
+- **No validation?** Add a schema check on tool output.
+- **No permission check?** Enforce an allowlist (see [HITL](/patterns/human-in-the-loop)).
+- **State drift?** Sync with the source of truth (see [Failure Modes](/concepts/failure-modes)).
+
+Patch the agent, test the scenario in staging with injected failures, then resume.
+
+### 6. Resume
+
+```python
+sb.sessions.update_state(
+    session_id=session_id,
+    state={"incident": False, "frozen": False},
+    reasoning="INCIDENT-2314 closed, agent resumed",
+)
+```
+
+---
+
+## Severity Matrix
+
+| Severity | Example | Action |
+|---|---|---|
+| S1 | Agent deleted or corrupted critical data | Immediate freeze + rollback |
+| S2 | Agent produced wrong financial/medical output | Freeze, rollback, review |
+| S3 | Bad recommendations, no data loss | Monitor, correct, review |
+| S4 | Cosmetic errors | Log, fix in next deploy |
+
+---
+
+## Post-Incident Review
+
+- What failure mode was it? (hallucination, drift, tool failure, loop...)
+- Where was the missing checkpoint?
+- Add the scenario to your **failure-injection tests** (see [Templates](/templates/failure-injection)).
+
+---
+
+## Next Steps
+
+- **[Failure Modes](/concepts/failure-modes)**: the 7 ways agents fail
+- **[Rollback Strategies](/playbook/rollback-strategies)**: technique comparison
+- **[Replay & Audit](/concepts/replay-audit)**: debugging production runs

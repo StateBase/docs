@@ -1,0 +1,166 @@
+---
+title: "Production Agent"
+description: "A battle-tested template with retries, validation, and incident recovery"
+---
+
+# Production Agent
+
+The starter agent gets you running. This template gets you to production: structured state, checkpointed tool calls, input validation, retries, and recovery wiring.
+
+---
+
+## The Structure
+
+```
+src/
+  agent.py          # core loop
+  tools.py          # tool definitions with checkpointing
+  validation.py     # output schema validation
+  recovery.py       # incident handling + rollback
+  config.py         # env-driven config
+```
+
+---
+
+## Core Loop
+
+```python
+import os
+import time
+from openai import OpenAI
+from pydantic import BaseModel, ValidationError
+from statebase import StateBase, StateBaseError
+
+sb = StateBase(api_key=os.environ["STATEBASE_API_KEY"])
+llm = OpenAI()
+
+class AgentState(BaseModel):
+    stage: str = "gathering"
+    collected: dict[str, str] = {}
+    last_error: str | None = None
+
+
+def run_agent(session_id: str, user_input: str) -> str:
+    context = sb.sessions.get_context(session_id=session_id, turn_limit=15, memory_limit=8)
+
+    try:
+        response = llm.chat.completions.create(
+            model=os.environ["MODEL"],
+            messages=[
+                {"role": "system", "content": f"State:\n{context.state}\nContext:\n{context}"},
+                {"role": "user", "content": user_input},
+            ],
+        ).choices[0].message.content
+    except Exception as e:
+        return handle_error(session_id, "llm_generation", e)
+
+    sb.sessions.add_turn(
+        session_id=session_id,
+        input=user_input,
+        output=response,
+        reasoning="Production loop: context + generate + log",
+        metadata={"model": os.environ["MODEL"]},
+    )
+    return response
+```
+
+---
+
+## Checkpointed Tools
+
+```python
+def call_tool(session_id: str, name: str, fn, *args):
+    """Checkpoint before, roll back after failure."""
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={"pending_tool": name, "args": args},
+        reasoning=f"About to call {name}",
+    )
+    try:
+        result = fn(*args)
+    except Exception as e:
+        sb.sessions.rollback(session_id=session_id, version=-1)
+        raise ToolExecutionError(name, e) from e
+
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={"last_tool": name, "result": result},
+        reasoning=f"{name} succeeded",
+    )
+    return result
+```
+
+---
+
+## Output Validation
+
+Never trust a model blind — validate structured outputs and retry on failure:
+
+```python
+def validated_completion(messages, schema: type[BaseModel], retries: int = 2):
+    for attempt in range(retries):
+        raw = llm.chat.completions.create(
+            model=os.environ["MODEL"],
+            response_format={"type": "json_object"},
+            messages=messages,
+        ).choices[0].message.content
+        try:
+            return schema.model_validate_json(raw)
+        except ValidationError as e:
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({
+                "role": "user",
+                "content": f"Your output failed validation: {e}. Return valid JSON.",
+            })
+    raise ValidationError("Exhausted retries")
+```
+
+---
+
+## Recovery Wiring
+
+```python
+def handle_error(session_id: str, step: str, err: Exception) -> str:
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={"stage": "errored", "last_error": f"{step}: {err}"},
+        reasoning="Incident path",
+    )
+    # Alerting
+    notify_alerts(f"agent {session_id} failed at {step}: {err}")
+    return f"I hit an issue at {step}. A human has been notified."
+```
+
+---
+
+## Configuration
+
+```python
+import os
+from dataclasses import dataclass
+
+@dataclass
+class Config:
+    statebase_key: str = os.environ["STATEBASE_API_KEY"]
+    model: str = os.environ.get("MODEL", "gpt-4o-mini")
+    retries: int = int(os.environ.get("RETRIES", "3"))
+    checkpoint_on_commit: bool = os.environ.get("CHECKPOINT_ON_COMMIT", "true").lower() == "true"
+```
+
+---
+
+## Deployment Checklist
+
+- [ ] Scoped API key per service (see [Isolation Model](/security/isolation-model))
+- [ ] IP allowlisting on production keys
+- [ ] Alerts wired to a Slack/PagerDuty channel
+- [ ] [Failure-injection tests](/templates/failure-injection) in CI
+- [ ] Rollback drill: test `rollback(version=-1)` on a staging session weekly
+
+---
+
+## Next Steps
+
+- **[Failure Injection](/templates/failure-injection)**: tests that break your agent on purpose
+- **[Incident Recovery](/playbook/incident-recovery)**: the runbook for when it goes wrong
+- **[Cost vs Safety](/playbook/cost-vs-safety)**: tune checkpointing to your budget

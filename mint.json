@@ -107,6 +107,7 @@
             "pages": [
                 "patterns/tool-calling",
                 "patterns/rag-agents",
+                "patterns/agentic-rag",
                 "patterns/human-in-the-loop",
                 "patterns/long-running",
                 "patterns/multi-agent"
@@ -146,7 +147,8 @@
             "pages": [
                 "security/data-handling",
                 "security/isolation-model",
-                "security/reliability-guarantees"
+                "security/reliability-guarantees",
+                "security/self-hosting"
             ]
         },
         {
@@ -175,6 +177,9 @@
     "analytics": {
         "posthog": {
             "apiKey": "phc_mwpUk3r7dDsVAqjs1ogSt1jwPhlGcOG3cDz4mcJViwt"
+        },
+        "ga4": {
+            "measurementId": "G-B7N0ZJYV5R"
         }
     }
 }

@@ -1,0 +1,155 @@
+---
+title: "Long-Running Agent Pattern"
+description: "Build agents that run for hours, days, or weeks without losing progress"
+---
+
+# Long-Running Agent Pattern
+
+Long-running agents handle tasks that span hours, days, or weeks: monitoring pipelines, scheduled jobs, approval workflows, and research agents that run overnight. The core challenge is that **infrastructure fails more often than your task is short**.
+
+StateBase makes long-running agents safe by persisting every step. If your process crashes, restarts, or gets redeployed, the agent resumes from its last committed state.
+
+---
+
+## Why Long-Running Agents Fail
+
+| Failure | Symptom |
+|---|---|
+| Process crash | All in-memory progress lost |
+| Redeploy / restart | Agent restarts from scratch |
+| Rate limits | Long waits trip timeouts |
+| Partial work | Agent repeats side-effecting steps |
+| Silent drift | State diverges from reality mid-task |
+
+---
+
+## The Core Pattern
+
+The golden rule: **checkpoint before every side effect, resume from the last checkpoint**.
+
+```python
+from statebase import StateBase
+import time
+
+sb = StateBase(api_key="your-key")
+
+def run_long_task(session_id, task_definition):
+    # 1. Rehydrate state — resume where we left off
+    state = sb.sessions.get(session_id).state
+    cursor = state.get("cursor", 0)
+    completed = state.get("completed_items", [])
+
+    # 2. Process remaining items
+    for item in task_definition["items"][cursor:]:
+        if item.id in completed:
+            continue
+
+        # 3. Checkpoint BEFORE the side effect
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={"cursor": cursor, "current_item": item.id},
+            reasoning=f"Starting item {item.id}"
+        )
+
+        # 4. Do the work (may take minutes)
+        result = process_item(item)
+
+        # 5. Checkpoint AFTER success
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={
+                "cursor": cursor + 1,
+                "completed_items": completed + [item.id],
+                f"result_{item.id}": result
+            },
+            reasoning=f"Completed item {item.id}"
+        )
+        cursor += 1
+
+    return {"status": "complete", "results": ...}
+```
+
+If the process dies at any point, restarting the function rehydrates state and skips already-completed items.
+
+---
+
+## Heartbeat Checkpoints
+
+For very long tasks, commit a "heartbeat" on a timer so a crash never loses more than N minutes of work:
+
+```python
+def run_with_heartbeat(session_id, task, heartbeat_every=60):
+    state = sb.sessions.get(session_id).state
+    last_checkpoint = state.get("last_checkpoint", 0)
+
+    for step in task.steps:
+        step.run()
+
+        if time.time() - last_checkpoint > heartbeat_every:
+            sb.sessions.update_state(
+                session_id=session_id,
+                state={"progress": step.index, "last_checkpoint": time.time()},
+                reasoning=f"Heartbeat checkpoint at step {step.index}"
+            )
+            last_checkpoint = time.time()
+```
+
+---
+
+## Idempotency
+
+Long-running work retries. Make every step **idempotent** so replay is safe:
+
+```python
+def send_invoice(session_id, invoice_id):
+    state = sb.sessions.get(session_id).state
+    sent = state.get("sent_invoices", [])
+
+    if invoice_id in sent:
+        return "already sent"  # Replay-safe
+
+    email_service.send(invoice_id)
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={"sent_invoices": sent + [invoice_id]},
+        reasoning=f"Invoice {invoice_id} sent"
+    )
+```
+
+---
+
+## Waiting for External Events
+
+Long-running agents often block on humans, APIs, or schedules. Persist the pending intent so a restart can pick up where the wait ended:
+
+```python
+sb.sessions.update_state(
+    session_id=session_id,
+    state={
+        "status": "awaiting_approval",
+        "pending_action": action,
+        "requested_at": time.time()
+    },
+    reasoning="Waiting for human approval"
+)
+```
+
+When the webhook or callback arrives, rehydrate and continue.
+
+---
+
+## Best Practices
+
+- **Checkpoint before every side effect** — never after a risk without a save point
+- **Make steps idempotent** — replay must be safe
+- **Use heartbeats** for very long loops
+- **Persist the "intent"** of waits, not just the last message
+- **Monitor via Traces** — `sb.traces.list()` gives a full audit of the run
+
+---
+
+## Next Steps
+
+- **[Checkpoints & Rollbacks](/concepts/checkpoints-rollbacks)**: granular recovery
+- **[Multi-Agent Pattern](/patterns/multi-agent)**: coordinate several long-running agents
+- **[Incident Recovery](/playbook/incident-recovery)**: what to do when a run goes wrong

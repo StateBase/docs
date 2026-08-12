@@ -1,0 +1,122 @@
+---
+title: "Failure Injection"
+description: "Test your agent's recovery by deliberately breaking it"
+---
+
+# Failure Injection
+
+You only know your agent can recover if you've broken it on purpose. This template gives you a test harness that injects realistic failures and asserts your agent recovers.
+
+---
+
+## What to Inject
+
+| Fault | How to simulate | What to assert |
+|---|---|---|
+| **LLM timeout** | Raise `TimeoutError` from the LLM call | Agent retries or escalates |
+| **Tool crash** | Tool raises `RuntimeError` | Agent catches, checkpoints, tries next |
+| **Bad output** | Return malformed JSON | Validation rejects, agent repairs |
+| **State corruption** | Write garbage to `state` | Agent rolls back to last checkpoint |
+| **Rate limit** | Raise `RateLimitError` with `retry_after` | Agent backs off and succeeds |
+| **Network drop** | Raise `NetworkError` | Agent retries with backoff |
+
+---
+
+## Python Harness
+
+```python
+import pytest
+from statebase import StateBase
+
+sb = StateBase(api_key="test-key")
+
+def inject_failure(agent, failure_fn, session_id):
+    """Swap the tool that will fail."""
+    original = agent.tools["search"]
+    agent.tools["search"] = failure_fn
+    try:
+        return agent.run(session_id=session_id, user_input="Do the thing")
+    finally:
+        agent.tools["search"] = original
+
+
+def test_agent_recovers_from_tool_failure():
+    session = sb.sessions.create(agent_id="test-agent")
+
+    def broken_search(query):
+        raise RuntimeError("search backend down")
+
+    result = inject_failure(agent, broken_search, session.id)
+
+    # Agent should have caught it and continued
+    assert "search" in result.lower() or "unavailable" in result.lower()
+    # State should be intact at a checkpoint
+    state = sb.sessions.get_state(session_id=session.id)
+    assert state["stage"] != "errored"
+    # Turn log shows the failure happened and was handled
+    turns = sb.sessions.list_turns(session_id=session.id)
+    assert any("failed" in (t.reasoning or "") for t in turns)
+
+
+def test_agent_rolls_back_on_state_corruption():
+    session = sb.sessions.create(
+        agent_id="test-agent",
+        initial_state={"important": "value"},
+    )
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"important": "value"},
+        reasoning="checkpoint",
+    )
+
+    # Corrupt
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"important": None},
+        reasoning="corruption",
+    )
+
+    # Recover
+    sb.sessions.rollback(session_id=session.id, version=-2)
+
+    state = sb.sessions.get_state(session_id=session.id)
+    assert state["important"] == "value"
+```
+
+---
+
+## CI Integration
+
+```yaml
+# .github/workflows/agent-tests.yml
+name: Agent reliability tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e ".[test]"
+      - run: pytest tests/failure_injection.py -v
+        env:
+          STATEBASE_API_KEY: ${{ secrets.STATEBASE_TEST_KEY }}
+```
+
+---
+
+## Regression Golden Rule
+
+Every **post-incident review** (see [Incident Recovery](/playbook/incident-recovery)) must add one new failure-injection test. If the bug caused it, the test should have caught it. This turns incidents into permanently enforced guarantees.
+
+---
+
+## Next Steps
+
+- **[Production Agent](/templates/production-agent)**: the deployment this tests
+- **[Error Handling](/sdks/error-handling)**: the error classes you'll inject
+- **[Failure Modes](/concepts/failure-modes)**: the 7 ways agents break

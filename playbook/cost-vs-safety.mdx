@@ -1,0 +1,90 @@
+---
+title: "Cost vs. Safety"
+description: "Trade reliability against token and storage costs without gambling"
+---
+
+# Cost vs. Safety
+
+Every checkpoint, turn, and memory you persist costs a little money — and costs you nothing when disaster strikes. The art is deciding **where** to spend.
+
+---
+
+## The Tradeoff
+
+| Strategy | Safety | Cost | When to use |
+|---|---|---|---|
+| **Per-turn** | Maximum | Highest | Financial, medical, legal agents |
+| **Per-milestone** | High | Medium | Most production agents |
+| **On-commitment** | High | Low | Sales, planning, coding agents |
+| **Manual** | Low | Lowest | Experiments, prototypes |
+
+There is no free lunch: **you can only roll back to what you saved.**
+
+---
+
+## What Actually Costs Money
+
+1. **State storage** — every checkpoint is a version of your state
+2. **Turn storage** — every logged interaction
+3. **Memory embeddings** — semantic search indexing
+4. **API calls** — retrieving large contexts
+
+Cheap levers that preserve safety:
+
+- **Store only state, not raw transcripts.** If you don't need full transcripts for auditing, persist state and a summary.
+- **Sliding-window turns.** `get_context(turn_limit=10)` reads 10 turns but state history stays intact.
+- **Summarize old turns into memory** instead of keeping them verbatim.
+- **TTL on caches.** Don't checkpoint throwaway data (greetings, transient lookups).
+
+---
+
+## The 80/20 Rule
+
+Most production agents get 90% of the safety for 20% of the cost by checkpointing **only on commitment**:
+
+- Before calling a paid/external API
+- Before executing a user-visible action
+- After a state mutation that later steps depend on
+- When the user confirms or changes a decision
+
+```python
+def commit_point(session_id, state, reasoning):
+    sb.sessions.update_state(
+        session_id=session_id,
+        state=state,
+        reasoning=reasoning,
+    )
+```
+
+---
+
+## Budgeting Model
+
+Estimate with real numbers:
+
+```text
+Checkpoint cost   ~ $0.000001 per 1KB state (storage)
+Turn cost         ~ $0.0001 per turn (retrieval + storage)
+Memory embedding  ~ $0.0001 per memory item
+
+An agent doing 1,000 turns/day, per-turn checkpointing:
+  ~ $0.10/day  in state
+  ~ $0.10/day  in turns
+  = ~ $6/month  per active agent
+```
+
+Per-milestone drops that by 5-10x.
+
+---
+
+## Recommendation
+
+Start **per-turn**. Ship. Then measure how often you actually roll back. If rollbacks are rare and your context is expensive to retrieve, move to per-milestone. You can always add checkpoints later — you can't restore what was never saved.
+
+---
+
+## Next Steps
+
+- **[When to Checkpoint](/playbook/when-to-checkpoint)**: the critical-path principle
+- **[Rollback Strategies](/playbook/rollback-strategies)**: how to recover
+- **[Reliability Guarantees](/security/reliability-guarantees)**: what happens when things go wrong

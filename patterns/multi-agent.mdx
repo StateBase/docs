@@ -1,0 +1,151 @@
+---
+title: "Multi-Agent Pattern"
+description: "Coordinate multiple agents that share state, hand off work, and stay consistent"
+---
+
+# Multi-Agent Pattern
+
+Production systems rarely have one agent. You have a planner, executor, verifier, and escalation agent. The hard part isn't building them — it's keeping them **consistent** when they share a task.
+
+StateBase gives every agent a shared, durable source of truth: sessions, memories, and traces that all agents read and write.
+
+---
+
+## Orchestrator + Workers
+
+The most common topology. One orchestrator decomposes the task, dispatches workers, and merges results.
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+def orchestrator(session_id, task):
+    # 1. Decompose
+    subtasks = llm.decompose(task)
+
+    # 2. Record the plan in shared state
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={"plan": subtasks, "results": {}},
+        reasoning=f"Decomposed task into {len(subtasks)} subtasks"
+    )
+
+    # 3. Dispatch workers (each writes to the same session)
+    for i, subtask in enumerate(subtasks):
+        worker_id = dispatch_worker(session_id, i, subtask)
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={f"worker_{i}": worker_id},
+            reasoning=f"Dispatched worker {i}"
+        )
+
+    # 4. Wait for all workers, merge results
+    while not all_workers_done(session_id):
+        time.sleep(5)
+
+    results = sb.sessions.get(session_id).state["results"]
+    return merge(results)
+```
+
+Each worker rehydrates the same session, so partial results are visible to everyone:
+
+```python
+def worker(session_id, worker_id, subtask):
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={f"worker_{worker_id}": "in_progress"},
+        reasoning=f"Worker {worker_id} started"
+    )
+
+    result = execute(subtask)
+
+    # Write result back to the shared session
+    state = sb.sessions.get(session_id).state
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={"results": {**state.get("results", {}), worker_id: result}},
+        reasoning=f"Worker {worker_id} completed"
+    )
+```
+
+---
+
+## Supervisor Pattern
+
+A supervisor delegates and evaluates — nothing critical runs without a checkpoint:
+
+```python
+def supervisor(session_id, goal):
+    while not goal_achieved(session_id):
+        plan = llm.plan(goal)
+
+        # Checkpoint the plan before acting
+        sb.sessions.update_state(
+            session_id=session_id,
+            state={"plan": plan, "iteration": plan_count + 1},
+            reasoning="New plan"
+        )
+
+        for action in plan["actions"]:
+            result = execute(action)
+
+        # Evaluate — rollback if the loop is off track
+        if not evaluate(session_id):
+            sb.sessions.rollback(session_id=session_id, version=-1)
+```
+
+---
+
+## Handoffs
+
+When agent A hands off to agent B, write a handoff record so B has full context — and any third agent can audit the chain:
+
+```python
+sb.sessions.add_turn(
+    session_id=session_id,
+    input={"from": "planner", "action": "handoff"},
+    output={"to": "executor", "context": handoff_context},
+    metadata={"handoff": True, "depth": 1},
+    reasoning="Planner -> Executor handoff"
+)
+```
+
+---
+
+## Shared Memory
+
+Agents that should learn from each other share memories, not just sessions:
+
+```python
+# Any agent can persist a durable fact
+sb.memory.add(
+    session_id=session_id,
+    content="Production API returns 429 under 1000 RPS",
+    tags=["infra", "learned"],
+    type="observation"
+)
+
+# Any agent can retrieve it
+memories = sb.memory.search(
+    session_id=session_id,
+    query="rate limit behavior"
+)
+```
+
+---
+
+## Anti-Patterns
+
+- **Shared mutable globals** — agents overwriting each other's state; use one session + namespaced keys
+- **Orphan workers** — workers that die without checkpointing; always checkpoint start and finish
+- **Blind trust** — the verifier agent must validate worker output before merge
+- **Infinite delegation** — cap handoff depth with a metadata counter (see above)
+
+---
+
+## Next Steps
+
+- **[Tool Calling Pattern](/patterns/tool-calling)**: make workers reliable
+- **[Human-in-the-Loop Pattern](/patterns/human-in-the-loop)**: escalate from any agent
+- **[Replay & Audit](/concepts/replay-audit)**: trace the full multi-agent chain

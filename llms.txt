@@ -1,0 +1,75 @@
+# StateBase
+
+> StateBase is the state and memory layer for AI agents. Sessions, turns, checkpoints, rollbacks, and long-term memory — so agents stop forgetting and start recovering from mistakes.
+
+Docs: https://docs.statebase.org
+Dashboard: https://app.statebase.org
+GitHub: https://github.com/StateBase
+
+## Key Pages
+
+- [Introduction](https://docs.statebase.org/introduction) — what StateBase is
+- [When to Use StateBase](https://docs.statebase.org/start-here/when-to-use)
+- [Quickstart](https://docs.statebase.org/quickstart) — build a stateful agent in 2 minutes
+- [Copy-Paste Example](https://docs.statebase.org/start-here/copy-paste-example)
+
+## Core Concepts
+
+- [Sessions, Turns & Memory](https://docs.statebase.org/concepts/sessions-turns-memory) — the three primitives
+- [Checkpoints & Rollbacks](https://docs.statebase.org/concepts/checkpoints-rollbacks) — time-travel debugging
+- [Replay & Audit](https://docs.statebase.org/concepts/replay-audit) — debugging production runs
+- [Failure Modes](https://docs.statebase.org/concepts/failure-modes) — the 7 ways agents fail
+- [Mental Models](https://docs.statebase.org/concepts/mental-models)
+
+## Patterns
+
+- [Tool Calling](https://docs.statebase.org/patterns/tool-calling)
+- [RAG Agents](https://docs.statebase.org/patterns/rag-agents)
+- [Agentic RAG](https://docs.statebase.org/patterns/agentic-rag)
+- [Human in the Loop](https://docs.statebase.org/patterns/human-in-the-loop)
+- [Long-Running Agents](https://docs.statebase.org/patterns/long-running)
+- [Multi-Agent Systems](https://docs.statebase.org/patterns/multi-agent)
+
+## SDKs
+
+- [Python SDK](https://docs.statebase.org/sdks/python)
+- [TypeScript SDK](https://docs.statebase.org/sdks/typescript)
+- [SDK Patterns](https://docs.statebase.org/sdks/patterns)
+- [Error Handling](https://docs.statebase.org/sdks/error-handling)
+
+## Integrations
+
+- [OpenAI](https://docs.statebase.org/integrations/openai)
+- [Anthropic](https://docs.statebase.org/integrations/anthropic)
+- [LangChain](https://docs.statebase.org/integrations/langchain)
+- [LangGraph](https://docs.statebase.org/integrations/langgraph)
+- [Vercel AI SDK](https://docs.statebase.org/integrations/vercel-ai-sdk)
+- [MCP](https://docs.statebase.org/integrations/mcp)
+
+## Production Playbook
+
+- [When to Checkpoint](https://docs.statebase.org/playbook/when-to-checkpoint)
+- [Rollback Strategies](https://docs.statebase.org/playbook/rollback-strategies)
+- [Cost vs Safety](https://docs.statebase.org/playbook/cost-vs-safety)
+- [Incident Recovery](https://docs.statebase.org/playbook/incident-recovery)
+
+## Security & Compliance
+
+- [Data Handling](https://docs.statebase.org/security/data-handling)
+- [Isolation Model](https://docs.statebase.org/security/isolation-model)
+- [Reliability Guarantees](https://docs.statebase.org/security/reliability-guarantees)
+- [Self Hosting](https://docs.statebase.org/security/self-hosting)
+
+## Templates
+
+- [Starter Agent](https://docs.statebase.org/templates/starter-agent)
+- [Production Agent](https://docs.statebase.org/templates/production-agent)
+- [Failure Injection](https://docs.statebase.org/templates/failure-injection)
+
+## API Reference
+
+- [API Reference](https://docs.statebase.org/api-reference/introduction)
+- [Sessions](https://docs.statebase.org/api-reference/sessions)
+- [Turns](https://docs.statebase.org/api-reference/turns)
+- [Memory](https://docs.statebase.org/api-reference/memory)
+- [Traces](https://docs.statebase.org/api-reference/traces)

@@ -1,0 +1,133 @@
+---
+title: "Starter Agent"
+description: "A copy-paste template for your first stateful agent"
+---
+
+# Starter Agent
+
+The smallest complete agent that uses StateBase correctly: one session, turns logged, memory seeded, and a rollback path. Copy it, swap in your LLM, and you're running.
+
+---
+
+## Python
+
+```python
+import os
+from openai import OpenAI
+from statebase import StateBase
+
+sb = StateBase(api_key=os.environ["STATEBASE_API_KEY"])
+llm = OpenAI()
+
+# 1. Create a session
+session = sb.sessions.create(
+    agent_id="starter",
+    user_id="user_123",
+    initial_state={"greeted": False},
+)
+
+def agent(message):
+    # 2. Pull context (last 10 turns + relevant memories)
+    context = sb.sessions.get_context(
+        session_id=session.id,
+        turn_limit=10,
+        memory_limit=5,
+    )
+
+    # 3. Generate
+    response = llm.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": f"Context:\n{context}"},
+            {"role": "user", "content": message},
+        ],
+    ).choices[0].message.content
+
+    # 4. Log the turn
+    sb.sessions.add_turn(
+        session_id=session.id,
+        input=message,
+        output=response,
+        reasoning="Generated with default starter flow",
+    )
+
+    # 5. Checkpoint state when it changes
+    sb.sessions.update_state(
+        session_id=session.id,
+        state={"greeted": True},
+        reasoning="First interaction recorded",
+    )
+
+    return response
+
+print(agent("Hello! Remember that I like short answers."))
+print(agent("What do you know about my preferences?"))
+```
+
+---
+
+## TypeScript
+
+```typescript
+import { StateBase } from '@statebase/client';
+import OpenAI from 'openai';
+
+const sb = new StateBase({ apiKey: process.env.STATEBASE_API_KEY! });
+const llm = new OpenAI();
+
+const session = await sb.sessions.create({
+  agentId: 'starter',
+  userId: 'user_123',
+  initialState: { greeted: false },
+});
+
+async function agent(message: string): Promise<string> {
+  const context = await sb.sessions.getContext({
+    sessionId: session.id,
+    turnLimit: 10,
+    memoryLimit: 5,
+  });
+
+  const response = await llm.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: `Context:\n${context}` },
+      { role: 'user', content: message },
+    ],
+  });
+
+  const output = response.choices[0]!.message.content!;
+
+  await sb.sessions.addTurn({
+    sessionId: session.id,
+    input: message,
+    output,
+    reasoning: 'Generated with default starter flow',
+  });
+
+  await sb.sessions.updateState({
+    sessionId: session.id,
+    state: { greeted: true },
+    reasoning: 'First interaction recorded',
+  });
+
+  return output;
+}
+```
+
+---
+
+## What This Gives You
+
+- **Persistence** — state survives restarts
+- **Memory** — facts seed into `sb.memory` for future sessions
+- **Audit trail** — every turn logged with reasoning
+- **Rollback** — `sb.sessions.rollback(session_id=..., version=-1)` to undo a bad turn
+
+---
+
+## Next Steps
+
+- **[Production Agent](/templates/production-agent)**: hardening this into a real deployment
+- **[Tool Calling](/patterns/tool-calling)**: adding tools to the loop
+- **[Quickstart](/quickstart)**: the 2-minute version

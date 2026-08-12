@@ -1,0 +1,108 @@
+---
+title: "MCP Integration"
+description: "Connect StateBase to any Model Context Protocol client or server"
+---
+
+# MCP Integration
+
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) standardizes how agents talk to tools. StateBase can be used two ways with MCP:
+
+1. **StateBase as a tool server** — expose session state, memory, and traces to any MCP client (Claude, Cursor, custom agents).
+2. **StateBase as the memory layer for MCP-based agents** — your MCP tools write checkpoints and read context through StateBase, so every tool interaction is durable.
+
+---
+
+## StateBase as an MCP Tool Server
+
+Expose StateBase primitives over MCP so any capable agent can persist and recall state:
+
+```python
+# server.py
+from mcp.server import Server, stdio_server
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+server = Server("statebase-mcp")
+
+
+@server.tool()
+async def get_state(session_id: str) -> dict:
+    """Fetch the current state for a session."""
+    return sb.sessions.get(session_id=session_id).state
+
+
+@server.tool()
+async def save_state(session_id: str, state: dict, reasoning: str = "") -> dict:
+    """Persist a checkpoint for a session."""
+    return sb.sessions.update_state(
+        session_id=session_id, state=state, reasoning=reasoning
+    )
+
+
+@server.tool()
+async def recall(session_id: str, query: str) -> list:
+    """Semantic recall from agent memory."""
+    return sb.memory.search(session_id=session_id, query=query)
+
+
+async def main():
+    async with stdio_server() as (read, write):
+        await server.run(read, write)
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+```
+
+Run it with any MCP client:
+
+```bash
+pip install statebase mcp
+python server.py
+```
+
+---
+
+## Using StateBase as Memory for MCP Agents
+
+Standard MCP pattern, hardened with durable state:
+
+```python
+# An MCP agent that remembers across sessions
+from mcp.client import stdio_client
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+session_id = "mcp-agent-prod"
+
+# 1. Before each run, rehydrate context
+context = sb.sessions.get_context(session_id=session_id, query=user_query)
+
+# 2. Send to the MCP-capable agent along with recalled context
+messages = [{"role": "system", "content": f"Context: {context}"}] + history
+
+# 3. After the run, checkpoint
+sb.sessions.add_turn(
+    session_id=session_id,
+    input=user_query,
+    output=agent_response,
+    reasoning="MCP tool interaction logged"
+)
+```
+
+Every tool call the agent makes becomes recoverable — roll back a bad tool sequence instead of restarting the whole conversation.
+
+---
+
+## Tutorial
+
+For a full step-by-step MCP server build, see the [Agentic RAG pattern](/patterns/agentic-rag) for retrieval agents, or the [Long-Running pattern](/patterns/long-running) for agents that wait on MCP tools.
+
+---
+
+## Next Steps
+
+- **[Tool Calling Pattern](/patterns/tool-calling)**: reliable tool interactions
+- **[Long-Running Pattern](/patterns/long-running)**: agents that wait on MCP tools for long periods
+- **[Security: Isolation](/security/isolation-model)**: how session data is isolated

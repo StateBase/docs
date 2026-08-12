@@ -1,0 +1,88 @@
+---
+title: "Data Handling"
+description: "How StateBase stores, processes, and deletes your agent data"
+---
+
+# Data Handling
+
+This page explains how StateBase handles the data your agents produce: what we store, where it lives, how long we keep it, and how you control it.
+
+---
+
+## What StateBase Stores
+
+StateBase persists exactly what you tell it to:
+
+| Primitive | What it contains |
+|---|---|
+| **Sessions** | Identity, initial state, config |
+| **Turns** | Inputs, outputs, reasoning, metadata you attach |
+| **Memory** | Content you add + semantic embeddings |
+| **Traces** | Audit records of actions (read-only) |
+
+We do **not** inspect your prompt templates, tool code, or model weights. Your agent logic runs on your infrastructure; StateBase only stores the state and records you commit.
+
+---
+
+## Encryption
+
+- **In transit**: all API traffic is TLS 1.3.
+- **At rest**: all data is encrypted at rest (AES-256).
+- **Embeddings**: vectors are stored in encrypted indexes; raw content is retrievable only through your API key.
+
+---
+
+## Retention
+
+- Free tier: sessions and memories are retained for the active subscription period.
+- Pro and Enterprise: configurable retention — you choose how long sessions, turns, and traces are kept.
+- Enterprise: additional options for regional residency and delete-after-retention guarantees.
+
+Contact support to set explicit retention policies on your plan.
+
+---
+
+## Deletion
+
+Delete data at any time:
+
+```python
+from statebase import StateBase
+
+sb = StateBase(api_key="your-key")
+
+# Delete one memory item
+sb.memory.delete(memory_id="mem_123")
+
+# Delete a full session (state, turns, memories, traces)
+sb.sessions.delete(session_id="sess_123")
+
+# Wipe all data for a user across sessions (GDPR right-to-be-forgotten)
+sb.users.delete(user_id="user_456")
+```
+
+Deletion is synchronous and permanent — deleted checkpoints are removed from storage, not soft-deleted.
+
+---
+
+## Backups
+
+- Automatic daily backups of the control plane.
+- Point-in-time recovery available on Enterprise plans.
+- Your data is never used for model training.
+
+---
+
+## GDPR / CCPA
+
+- Right to access: `sb.users.export(user_id=...)` returns all stored data as JSON.
+- Right to erasure: `sb.users.delete(user_id=...)` removes it.
+- Data Processing Agreement available on request.
+
+---
+
+## Next Steps
+
+- **[Isolation Model](/security/isolation-model)**: how tenants and keys are separated
+- **[Reliability Guarantees](/security/reliability-guarantees)**: availability and durability
+- **[Self Hosting](/security/self-hosting)**: keep data in your VPC

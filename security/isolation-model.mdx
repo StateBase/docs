@@ -1,0 +1,74 @@
+---
+title: "Isolation Model"
+description: "How StateBase isolates tenants, keys, and sessions from each other"
+---
+
+# Isolation Model
+
+StateBase is a multi-tenant platform. This page defines the isolation boundaries — what separates one customer's data from another's, and one session from another.
+
+---
+
+## Tenant Isolation
+
+- **API keys are tenant-scoped.** A key created in organization A cannot read or write organization B's data. Every request is authorized against the key's tenant.
+- **Separate storage namespaces.** Each tenant's sessions, turns, memories, and traces live in a logically isolated namespace.
+- **No shared session IDs.** Session IDs are globally unique and tenant-bound — `sess_123` in tenant A is a different resource from `sess_123` in tenant B.
+
+---
+
+## Key Scopes
+
+You can create fine-grained API keys instead of one all-powerful key:
+
+```python
+sb.keys.create(
+    name="read-only-audit",
+    scopes=["traces:read", "sessions:read"],
+    expires_at="2027-01-01",
+)
+```
+
+| Scope | Grants |
+|---|---|
+| `sessions:read` / `sessions:write` | Read / create and mutate sessions |
+| `memory:read` / `memory:write` | Query / write memories |
+| `traces:read` | Read audit traces only |
+| `keys:manage` | Create and revoke API keys (admin) |
+
+A compromised scoped key can only touch what it was given.
+
+---
+
+## Session-Level Boundaries
+
+Even within one tenant:
+
+- **User-scoped memory** is not visible to other users unless you explicitly share it (see [Memory Scopes](/concepts/memory-scopes)).
+- **Traces are append-only** — agent code cannot rewrite history to hide actions.
+- **Rollback is versioned** — every recovery leaves an auditable record.
+
+---
+
+## Network Isolation (Enterprise)
+
+- **Self hosting**: run StateBase entirely inside your VPC ([guide](/security/self-hosting)).
+- **Private networking**: VPC peering / PrivateLink for cloud-hosting customers.
+- **IP allowlists**: restrict API access to your egress ranges.
+
+---
+
+## Security Best Practices
+
+- Rotate keys on a schedule; use scoped keys per service.
+- Use environment variables or a secret manager — never commit keys.
+- Enable IP allowlisting for production keys.
+- Audit key usage via `sb.traces.list(action="key.used")`.
+
+---
+
+## Next Steps
+
+- **[Data Handling](/security/data-handling)**: encryption, retention, deletion
+- **[Memory Scopes](/concepts/memory-scopes)**: user vs. agent vs. global memory
+- **[Reliability Guarantees](/security/reliability-guarantees)**: what happens when things go wrong

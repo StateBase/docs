@@ -1,0 +1,146 @@
+---
+title: "Error Handling"
+description: "Manage API errors, retries, and timeouts across all StateBase SDKs"
+---
+
+# Error Handling
+
+StateBase is designed for reliability, but network calls, transient backend issues, and user mistakes still happen. This guide covers every error class and how to handle each one.
+
+---
+
+## Error Classes
+
+The SDKs raise typed errors:
+
+| Error | Raised when | Is it retryable? |
+|---|---|---|
+| `AuthenticationError` | Invalid or expired API key | No |
+| `PermissionError` | Key lacks access to the resource | No |
+| `NotFoundError` | Session, memory, or turn doesn't exist | No |
+| `ValidationError` | Malformed request body or params | No |
+| `RateLimitError` | Too many requests (429) | Yes — backoff |
+| `TimeoutError` | Request exceeded timeout | Yes — careful |
+| `APIError` | Backend returned 5xx | Yes — backoff |
+| `NetworkError` | Connection dropped | Yes |
+
+---
+
+## Basic Handling
+
+```python
+from statebase import StateBase, StateBaseError
+
+sb = StateBase(api_key="your-key")
+
+try:
+    session = sb.sessions.create(agent_id="chatbot")
+except StateBaseError as e:
+    print(f"StateBase error: {e.status_code} {e.message}")
+    # e.code      -> machine-readable code, e.g. "session_not_found"
+    # e.docs      -> link to the relevant docs page
+    # e.suggestion-> what to do next
+```
+
+---
+
+## Retry with Exponential Backoff
+
+The SDK retries transient failures automatically with jittered backoff. To tune it:
+
+```python
+sb = StateBase(
+    api_key="your-key",
+    max_retries=3,          # default: 3
+    backoff_factor=0.5,     # 0.5s, 1s, 2s, 4s...
+    jitter=True,            # add randomness to avoid thundering herd
+    timeout=30.0,           # per-request timeout in seconds
+)
+```
+
+---
+
+## Manual Retry Pattern
+
+When you need full control (e.g., long-running agents that shouldn't auto-retry forever):
+
+```python
+import time
+from statebase import RateLimitError, APIError
+
+def with_retry(fn, max_attempts=5):
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except RateLimitError as e:
+            wait = e.retry_after or (2 ** attempt)
+            time.sleep(wait)
+        except APIError:
+            time.sleep(2 ** attempt)
+    raise RuntimeError("Exhausted retries")
+```
+
+---
+
+## Idempotency Keys
+
+To safely retry **non-idempotent** writes, pass an idempotency key so a retried request doesn't double-execute:
+
+```python
+import uuid
+
+sb.sessions.add_turn(
+    session_id=session.id,
+    input="Book a flight",
+    output="Booked flight #123",
+    idempotency_key=str(uuid.uuid4()),
+)
+```
+
+A retry with the same key returns the original result instead of creating a duplicate turn.
+
+---
+
+## Handling Partial Failures in Agents
+
+For agent code, wrap tool calls and checkpoint around them (see [Tool Calling](/patterns/tool-calling)):
+
+```python
+try:
+    result = call_tool(name, args)
+    sb.sessions.update_state(
+        session_id=session_id,
+        state={"last_tool": "ok"},
+        reasoning="Tool succeeded"
+    )
+except StateBaseError:
+    # The tool may or may not have run — roll back to the pre-call checkpoint
+    sb.sessions.rollback(session_id=session_id, version=-1)
+    raise
+```
+
+---
+
+## Async / TypeScript
+
+```typescript
+import { StateBase, StateBaseError } from '@statebase/client';
+
+const sb = new StateBase({ apiKey: process.env.SB_KEY });
+
+try {
+  const session = await sb.sessions.create({ agentId: 'chatbot' });
+} catch (err) {
+  if (err instanceof StateBaseError && err.retryable) {
+    await sb.sessions.create({ agentId: 'chatbot' }); // one retry
+  }
+}
+```
+
+---
+
+## Next Steps
+
+- **[Python SDK](/sdks/python)**: full client reference
+- **[Reliability Guarantees](/security/reliability-guarantees)**: what StateBase guarantees on its side
+- **[Incident Recovery](/playbook/incident-recovery)**: recovering from real production incidents
